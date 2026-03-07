@@ -32,6 +32,9 @@ install(
 
 install(
     FILES "kglobalaccelrc"
+          "kdeglobals"
+          "ksplashrc"
+          "plasmarc"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/plasma-setup
 )
 

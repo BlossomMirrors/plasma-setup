@@ -23,6 +23,7 @@
 #include <cerrno>
 #include <exception>
 #include <grp.h>
+#include <map>
 #include <pwd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -434,13 +435,24 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
 
     QString homePath = userInfo.homePath;
 
-    // Copy the file to a temp file while we still have privileges
-    QString sourceFilePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config/kdeglobals");
-    std::unique_ptr<QTemporaryFile> tempFile;
-    try {
-        tempFile = copyToTempFile(sourceFilePath);
-    } catch (const std::runtime_error &e) {
-        return makeErrorReply(QStringLiteral("Error copying file to temporary location: ") + QString::fromStdString(e.what()));
+    // List of configuration files to copy for theme, splash, and wallpaper settings
+    QStringList filesToCopy = {
+        QStringLiteral("kdeglobals"),
+        QStringLiteral("ksplashrc"),
+        QStringLiteral("plasmarc"),
+    };
+
+    QString sourceBasePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config");
+
+    // Copy files to temp files while we still have privileges
+    std::map<QString, std::unique_ptr<QTemporaryFile>> tempFiles;
+    for (const QString &fileName : filesToCopy) {
+        QString sourceFilePath = QDir::cleanPath(sourceBasePath + QStringLiteral("/") + fileName);
+        try {
+            tempFiles[fileName] = copyToTempFile(sourceFilePath);
+        } catch (const std::runtime_error &e) {
+            return makeErrorReply(QStringLiteral("Error copying file to temporary location: ") + QString::fromStdString(e.what()));
+        }
     }
 
     try {
@@ -459,12 +471,15 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
             return makeErrorReply(QStringLiteral("Unable to create .config directory: ") + configDirPath);
         }
 
-        // Set the global theme for the new user
-        QString destFilePath = QDir::cleanPath(configDirPath + QStringLiteral("/kdeglobals"));
+        // Copy all configuration files to the new user
+        for (const QString &fileName : filesToCopy) {
+            QString destFilePath = QDir::cleanPath(configDirPath + QStringLiteral("/") + fileName);
 
-        if (!tempFile->copy(destFilePath)) {
-            return makeErrorReply(QStringLiteral("Unable to copy file to destination: ") + tempFile->fileName() + QStringLiteral(" to ") + destFilePath
-                                  + QStringLiteral(" -- Error message: ") + tempFile->errorString());
+            auto tempFile = tempFiles[fileName].get();
+            if (!tempFile->copy(destFilePath)) {
+                return makeErrorReply(QStringLiteral("Unable to copy file to destination: ") + tempFile->fileName() + QStringLiteral(" to ") + destFilePath
+                                      + QStringLiteral(" -- Error message: ") + tempFile->errorString());
+            }
         }
 
         return ActionReply::SuccessReply();

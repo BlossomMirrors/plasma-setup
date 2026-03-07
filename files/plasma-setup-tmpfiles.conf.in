@@ -40,5 +40,14 @@ f /run/plasma-setup/.config/plasma-org.kde.plasma.desktop-appletsrc - - - - [Con
 # Install the customized global shortcuts config
 C+ /run/plasma-setup/.config/kglobalaccelrc - - - - ${CMAKE_INSTALL_FULL_DATADIR}/plasma-setup/kglobalaccelrc
 
+# Install BlossomUI theme configuration with Bibata cursor
+C+ /run/plasma-setup/.config/kdeglobals - - - - ${CMAKE_INSTALL_FULL_DATADIR}/plasma-setup/kdeglobals
+
+# Disable splash screen
+C+ /run/plasma-setup/.config/ksplashrc - - - - ${CMAKE_INSTALL_FULL_DATADIR}/plasma-setup/ksplashrc
+
+# Set BlossomOS wallpaper
+C+ /run/plasma-setup/.config/plasmarc - - - - ${CMAKE_INSTALL_FULL_DATADIR}/plasma-setup/plasmarc
+
 # Recursively set the ownership of the home directory
 Z /run/plasma-setup 0750 plasma-setup plasma-setup - -
