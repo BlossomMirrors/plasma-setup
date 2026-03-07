@@ -1,0 +1,6 @@
+[Libinput][2][7][SynPS/2 Synaptics TouchPad]
+NaturalScroll=true
+
+[Mouse]
+cursorSize=20
+cursorTheme=Bibata-Modern-Classic

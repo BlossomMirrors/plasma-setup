@@ -49,5 +49,8 @@ C+ /run/plasma-setup/.config/ksplashrc - - - - ${CMAKE_INSTALL_FULL_DATADIR}/pla
 # Set BlossomOS wallpaper
 C+ /run/plasma-setup/.config/plasmarc - - - - ${CMAKE_INSTALL_FULL_DATADIR}/plasma-setup/plasmarc
 
+# Set Bibata-Modern-Classic cursor theme
+C+ /run/plasma-setup/.config/kcminputrc - - - - ${CMAKE_INSTALL_FULL_DATADIR}/plasma-setup/kcminputrc
+
 # Recursively set the ownership of the home directory
 Z /run/plasma-setup 0750 plasma-setup plasma-setup - -

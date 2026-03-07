@@ -35,6 +35,7 @@ install(
           "kdeglobals"
           "ksplashrc"
           "plasmarc"
+          "kcminputrc"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/plasma-setup
 )
 

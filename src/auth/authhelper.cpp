@@ -435,11 +435,12 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
 
     QString homePath = userInfo.homePath;
 
-    // List of configuration files to copy for theme, splash, and wallpaper settings
+    // List of configuration files to copy for theme, splash, wallpaper, and cursor settings
     QStringList filesToCopy = {
         QStringLiteral("kdeglobals"),
         QStringLiteral("ksplashrc"),
         QStringLiteral("plasmarc"),
+        QStringLiteral("kcminputrc"),
     };
 
     QString sourceBasePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config");
