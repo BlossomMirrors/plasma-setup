@@ -9,6 +9,14 @@
 
 Fedora's `plasma-setup` package with the patches in `patches/` on top. Fedora's own downstream patches (its look and feel and wallpaper) are dropped, since ours replace them.
 
+## Screenshots
+
+![The welcome page](screenshots/home.png)
+
+| Updates page (dark) | Web browser page |
+|---|---|
+| ![The updates page downloading a new system image](screenshots/updates.png) | ![The web browser page with a list of browsers to install](screenshots/browser.png) |
+
 ## Usage
 
 ```
