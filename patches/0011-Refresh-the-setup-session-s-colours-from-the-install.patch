@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 11:30:33 +0200
+Subject: [PATCH 11/11] Refresh the setup session's colours from the installed
+ scheme
+
+---
+ src/main.cpp | 59 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 59 insertions(+)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index f43a67e..f4141b4 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -4,16 +4,22 @@
+ // SPDX-License-Identifier: LGPL-2.0-or-later
+ 
+ #include <KAboutData>
++#include <KConfig>
++#include <KConfigGroup>
+ #include <KLocalizedContext>
+ #include <KLocalizedQmlContext>
+ #include <KLocalizedString>
+ #include <KPackage/PackageLoader>
++#include <KSharedConfig>
+ #include <QApplication>
+ #include <QCommandLineOption>
+ #include <QCommandLineParser>
++#include <QDBusConnection>
++#include <QDBusMessage>
+ #include <QQmlApplicationEngine>
+ #include <QQmlContext>
+ #include <QQuickStyle>
++#include <QStandardPaths>
+ #include <QUrl>
+ 
+ #include "../plasma-setup-version.h"
+@@ -22,10 +28,63 @@
+ 
+ using namespace Qt::StringLiterals;
+ 
++namespace
++{
++// The setup session's kdeglobals is copied from /etc/skel, whose colours can
++// lag behind the installed BlossomUI scheme. Copy the scheme's colours in
++// again, as applying it in System Settings would, so the wizard, and the
++// new user it hands kdeglobals to, get the current ones.
++// Returns whether anything changed.
++bool refreshColorScheme()
++{
++    auto globals = KSharedConfig::openConfig(u"kdeglobals"_s, KConfig::SimpleConfig);
++    // Either the scheme's file name or its display name ("BlossomUI Light")
++    const QString scheme = globals->group(u"General"_s).readEntry("ColorScheme", QString()).remove(u' ');
++    if (scheme.isEmpty()) {
++        return false;
++    }
++    const QString path = QStandardPaths::locate(QStandardPaths::GenericDataLocation, u"color-schemes/%1.colors"_s.arg(scheme));
++    if (path.isEmpty()) {
++        return false;
++    }
++
++    KConfig colors(path, KConfig::SimpleConfig);
++    bool changed = false;
++    for (const QString &name : colors.groupList()) {
++        if (!name.startsWith(u"Colors:"_s) && name != u"WM"_s) {
++            continue;
++        }
++        const auto entries = colors.group(name).entryMap();
++        KConfigGroup group = globals->group(name);
++        if (group.entryMap() == entries) {
++            continue;
++        }
++        group.deleteGroup();
++        for (auto it = entries.cbegin(); it != entries.cend(); ++it) {
++            group.writeEntry(it.key(), it.value());
++        }
++        changed = true;
++    }
++    if (changed) {
++        globals->sync();
++    }
++    return changed;
++}
++}
++
+ int main(int argc, char *argv[])
+ {
++    const bool colorsChanged = refreshColorScheme();
++
+     QApplication app(argc, argv);
+ 
++    if (colorsChanged) {
++        // Let the shell and KWin, already running, pick up the new colours
++        auto message = QDBusMessage::createSignal(u"/KGlobalSettings"_s, u"org.kde.KGlobalSettings"_s, u"notifyChange"_s);
++        message.setArguments({0 /* PaletteChanged */, 0});
++        QDBusConnection::sessionBus().send(message);
++    }
++
+     KLocalizedString::setApplicationDomain("org.kde.plasmasetup");
+ 
+     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
