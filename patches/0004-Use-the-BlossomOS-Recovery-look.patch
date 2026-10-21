@@ -19,10 +19,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  src/glowprovider.h                |  29 +++++++++++
  src/main.cpp                      |   4 +-
  src/qml/Backdrop.qml              |  72 ++++++++++++++++++++++++++
- src/qml/BlossomWindow.qml         |  59 +++++++++++++++++++++
+ src/qml/BlossomWindow.qml         |  54 +++++++++++++++++++
  src/qml/LandingComponent.qml      |  83 ++++++++----------------------
  src/qml/Wizard.qml                |  21 +++-----
- 11 files changed, 289 insertions(+), 76 deletions(-)
+ 11 files changed, 284 insertions(+), 76 deletions(-)
  create mode 100644 src/assets/blossomos-symbolic.svg
  create mode 100644 src/assets/bluenoise.png
  create mode 100644 src/glowprovider.cpp
@@ -403,10 +403,10 @@ index 0000000..02b010e
 +}
 diff --git a/src/qml/BlossomWindow.qml b/src/qml/BlossomWindow.qml
 new file mode 100644
-index 0000000..23bcb4a
+index 0000000..6fe9662
 --- /dev/null
 +++ b/src/qml/BlossomWindow.qml
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,54 @@
 +// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +// Ported from BlossomOS Recovery
@@ -428,20 +428,15 @@ index 0000000..23bcb4a
 +    Kirigami.Theme.colorSet: Kirigami.Theme.Window
 +    Kirigami.Theme.inherit: false
 +
-+    Repeater {
-+        model: window.radius > 0 ? 14 : 0
-+        Rectangle {
-+            required property int index
-+            readonly property int spread: index * 2 + 2
-+            x: -spread
-+            y: -spread + Math.round(spread / 3)
-+            width: window.width + spread * 2
-+            height: window.height + spread * 2
-+            radius: window.radius + spread
-+            color: "transparent"
-+            border.width: 2
-+            border.color: Qt.rgba(0, 0, 0, 0.11 * Math.pow(1 - index / 14, 2))
-+        }
++    // Soft drop shadow, drawn behind the frame so its clip doesn't cut it off
++    Kirigami.ShadowedRectangle {
++        anchors.fill: parent
++        visible: window.radius > 0
++        radius: window.radius
++        color: window.frameColor
++        shadow.size: 28
++        shadow.yOffset: 6
++        shadow.color: Qt.rgba(0, 0, 0, 0.16)
 +    }
 +
 +    Rectangle {
