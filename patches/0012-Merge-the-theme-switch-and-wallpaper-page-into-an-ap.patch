@@ -1,0 +1,1375 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 13:02:13 +0200
+Subject: [PATCH 12/12] Merge the theme switch and wallpaper page into an
+ appearance page
+
+The Dark Theme switch moves from the "Before we get started" page, which
+is no longer built, to the wallpaper page, now the appearance page. It
+also gets an accent colour row with quick-appearance-kcm's palette, baked
+into kdeglobals the same way and merged into the new user's along with
+the theme. Picking BlossomUI's own blue clears the accent again.
+
+The wallpaper can go on the desktop, the lock screen or both. Once the
+user picks one, it replaces the glow behind setup. The glow crossfades
+to a new accent colour over 5 seconds instead of blinking out.
+---
+ modules/CMakeLists.txt                        |  11 +-
+ .../{wallpaper => appearance}/CMakeLists.txt  |   6 +-
+ modules/appearance/contents/ui/main.qml       | 313 ++++++++++++++++++
+ .../{wallpaper => appearance}/metadata.json   |  12 +-
+ .../metadata.json.license                     |   0
+ modules/prepareutil/prepareutil.cpp           | 151 ++++++++-
+ modules/prepareutil/prepareutil.h             |  12 +
+ modules/wallpaper/contents/ui/main.qml        | 144 --------
+ modules/wallpaperutil/wallpaperutil.cpp       | 112 ++++++-
+ modules/wallpaperutil/wallpaperutil.h         |  45 ++-
+ po/de/org.kde.plasmasetup.po                  |  43 ++-
+ src/auth/authhelper.cpp                       |  34 +-
+ src/qml/Backdrop.qml                          | 144 +++++++-
+ 13 files changed, 824 insertions(+), 203 deletions(-)
+ rename modules/{wallpaper => appearance}/CMakeLists.txt (56%)
+ create mode 100644 modules/appearance/contents/ui/main.qml
+ rename modules/{wallpaper => appearance}/metadata.json (50%)
+ rename modules/{wallpaper => appearance}/metadata.json.license (100%)
+ delete mode 100644 modules/wallpaper/contents/ui/main.qml
+
+diff --git a/modules/CMakeLists.txt b/modules/CMakeLists.txt
+index cc2f1d8..1bd1e23 100644
+--- a/modules/CMakeLists.txt
++++ b/modules/CMakeLists.txt
+@@ -5,6 +5,9 @@
+ add_subdirectory(account)
+ kpackage_install_package(account org.kde.plasmasetup.account packages plasma)
+ 
++add_subdirectory(appearance)
++kpackage_install_package(appearance org.kde.plasmasetup.appearance packages plasma)
++
+ add_subdirectory(browser)
+ kpackage_install_package(browser org.kde.plasmasetup.browser packages plasma)
+ 
+@@ -23,8 +26,9 @@ kpackage_install_package(keyboard org.kde.plasmasetup.keyboard packages plasma)
+ add_subdirectory(language)
+ kpackage_install_package(language org.kde.plasmasetup.language packages plasma)
+ 
+-add_subdirectory(prepare)
+-kpackage_install_package(prepare org.kde.plasmasetup.prepare packages plasma)
++# The theme switch is on the appearance page
++# add_subdirectory(prepare)
++# kpackage_install_package(prepare org.kde.plasmasetup.prepare packages plasma)
+ 
+ add_subdirectory(time)
+ kpackage_install_package(time org.kde.plasmasetup.time packages plasma)
+@@ -32,9 +36,6 @@ kpackage_install_package(time org.kde.plasmasetup.time packages plasma)
+ add_subdirectory(updates)
+ kpackage_install_package(updates org.kde.plasmasetup.updates packages plasma)
+ 
+-add_subdirectory(wallpaper)
+-kpackage_install_package(wallpaper org.kde.plasmasetup.wallpaper packages plasma)
+-
+ add_subdirectory(wifi)
+ kpackage_install_package(wifi org.kde.plasmasetup.wifi packages plasma)
+ 
+diff --git a/modules/wallpaper/CMakeLists.txt b/modules/appearance/CMakeLists.txt
+similarity index 56%
+rename from modules/wallpaper/CMakeLists.txt
+rename to modules/appearance/CMakeLists.txt
+index 3d77756..73e44ce 100644
+--- a/modules/wallpaper/CMakeLists.txt
++++ b/modules/appearance/CMakeLists.txt
+@@ -2,11 +2,11 @@
+ #
+ # SPDX-License-Identifier: GPL-2.0-or-later
+ 
+-ecm_add_qml_module(plasmasetup_wallpaper
+-    URI "org.kde.plasmasetup.wallpaper"
++ecm_add_qml_module(plasmasetup_appearance
++    URI "org.kde.plasmasetup.appearance"
+     GENERATE_PLUGIN_SOURCE
+     DEPENDENCIES
+         Qt::Core
+ )
+ 
+-ecm_finalize_qml_module(plasmasetup_wallpaper)
++ecm_finalize_qml_module(plasmasetup_appearance)
+diff --git a/modules/appearance/contents/ui/main.qml b/modules/appearance/contents/ui/main.qml
+new file mode 100644
+index 0000000..bf49cf4
+--- /dev/null
++++ b/modules/appearance/contents/ui/main.qml
+@@ -0,0 +1,313 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Layouts
++import QtQuick.Window
++
++import org.kde.kirigami as Kirigami
++import org.kde.kirigamiaddons.formcard as FormCard
++import org.kde.plasmasetup.prepareutil as Prepare
++import org.kde.plasmasetup.wallpaperutil as Wallpaper
++
++import org.kde.plasmasetup.components as PlasmaSetupComponents
++
++/**
++* @brief Module for choosing how the desktop looks
++*
++* The light/dark switch, the accent colour (the palette of
++* quick-appearance-kcm), and the desktop and lock screen wallpaper from the
++* ones listed in plasma-setup/wallpapers.json, shown in their dark variant
++* while the dark theme is on.
++*/
++PlasmaSetupComponents.SetupModule {
++    id: root
++
++    // Same as quick-appearance-kcm's, the first is BlossomUI's own
++    readonly property var accentPalette: ["#3e78ff", "#ff5266", "#ef8c4a", "#dfb355", "#4cd47c", "#45cfab", "#45ace6", "#7d52ff", "#b552ff", "#ff52b5", "#8fa3c4"]
++    // Nothing to choose from with a single wallpaper
++    readonly property bool hasWallpapers: Wallpaper.WallpaperUtil.wallpapers.length > 1
++
++    nextEnabled: true
++
++    component AccentSwatch: AbstractButton {
++        id: swatch
++
++        property color swatchColor
++        readonly property bool current: {
++            const accent = Prepare.PrepareUtil.accentColor || Prepare.PrepareUtil.schemeAccentColor;
++            return accent.toLowerCase() === swatchColor.toString().toLowerCase();
++        }
++
++        implicitWidth: Kirigami.Units.gridUnit * 1.6
++        implicitHeight: implicitWidth
++        hoverEnabled: true
++        focusPolicy: Qt.StrongFocus
++        scale: hovered || current || visualFocus ? 1.12 : 1
++
++        Behavior on scale {
++            NumberAnimation {
++                duration: Kirigami.Units.shortDuration
++                easing.type: Easing.OutCubic
++            }
++        }
++
++        Accessible.role: Accessible.RadioButton
++        Accessible.checked: current
++        Accessible.name: swatchColor.toString()
++
++        onClicked: Prepare.PrepareUtil.accentColor = swatchColor.toString()
++
++        contentItem: Item {}
++        background: Rectangle {
++            radius: width / 2
++            gradient: Gradient {
++                GradientStop {
++                    position: 0
++                    color: Qt.lighter(swatch.swatchColor, 1.18)
++                }
++                GradientStop {
++                    position: 1
++                    color: Qt.darker(swatch.swatchColor, 1.06)
++                }
++            }
++            border.width: swatch.visualFocus ? 2 : 1
++            border.color: swatch.visualFocus ? Kirigami.Theme.textColor : Qt.alpha("#000000", 0.12)
++
++            Rectangle {
++                visible: swatch.current
++                anchors.centerIn: parent
++                width: parent.width * 0.55
++                height: width
++                radius: width / 2
++                color: Qt.alpha("#000000", 0.3)
++
++                Kirigami.Icon {
++                    anchors.fill: parent
++                    anchors.margins: 3
++                    source: "emblem-ok-symbolic"
++                    isMask: true
++                    color: "#ffffff"
++                }
++            }
++        }
++    }
++
++    contentItem: ColumnLayout {
++        spacing: Kirigami.Units.smallSpacing
++
++        Label {
++            Layout.leftMargin: Kirigami.Units.gridUnit
++            Layout.rightMargin: Kirigami.Units.gridUnit
++            Layout.bottomMargin: Kirigami.Units.gridUnit
++            Layout.fillWidth: true
++
++            wrapMode: Text.Wrap
++            horizontalAlignment: Text.AlignHCenter
++            text: i18n("Choose how your desktop looks. You can change it later in System Settings.")
++        }
++
++        FormCard.FormCard {
++            Layout.fillWidth: true
++            maximumWidth: Math.min(Kirigami.Units.gridUnit * 30, root.contentItem.width - Kirigami.Units.gridUnit * 2)
++
++            FormCard.FormSwitchDelegate {
++                text: i18n("Dark Theme")
++                checked: Prepare.PrepareUtil.usingDarkTheme
++                onCheckedChanged: {
++                    if (checked !== Prepare.PrepareUtil.usingDarkTheme) {
++                        Prepare.PrepareUtil.usingDarkTheme = checked;
++                    }
++                }
++            }
++
++            FormCard.FormDelegateSeparator {}
++
++            FormCard.AbstractFormDelegate {
++                background: null
++                hoverEnabled: false
++                focusPolicy: Qt.NoFocus
++
++                contentItem: ColumnLayout {
++                    spacing: Kirigami.Units.largeSpacing
++
++                    Label {
++                        Layout.fillWidth: true
++                        text: i18n("Accent Color")
++                        elide: Text.ElideRight
++                    }
++
++                    Flow {
++                        Layout.fillWidth: true
++                        Layout.bottomMargin: Kirigami.Units.smallSpacing
++                        spacing: Math.round(Kirigami.Units.smallSpacing * 1.5)
++
++                        Repeater {
++                            model: root.accentPalette
++
++                            delegate: AccentSwatch {
++                                required property string modelData
++                                swatchColor: modelData
++                            }
++                        }
++                    }
++                }
++            }
++        }
++
++        Kirigami.Heading {
++            Layout.topMargin: Kirigami.Units.largeSpacing
++            Layout.leftMargin: Kirigami.Units.largeSpacing / 2
++            Layout.fillWidth: true
++            visible: root.hasWallpapers
++            level: 4
++            text: i18n("Wallpaper")
++        }
++
++        ScrollView {
++            Layout.fillWidth: true
++            Layout.fillHeight: true
++            visible: root.hasWallpapers
++
++            GridView {
++                id: grid
++
++                readonly property bool dark: Kirigami.ColorUtils.brightnessForColor(Kirigami.Theme.backgroundColor) === Kirigami.ColorUtils.Dark
++                readonly property int columns: Math.max(2, Math.floor(width / (Kirigami.Units.gridUnit * 9)))
++
++                clip: true
++                keyNavigationEnabled: true
++                cellWidth: Math.floor(width / columns)
++                cellHeight: Math.round((cellWidth - Kirigami.Units.largeSpacing) * 9 / 16) + Kirigami.Units.largeSpacing * 2 + Kirigami.Units.gridUnit
++                model: Wallpaper.WallpaperUtil.wallpapers
++                currentIndex: model.findIndex(wallpaper => wallpaper.id === Wallpaper.WallpaperUtil.selected)
++                // Arrow keys pick, like in a group of radio buttons
++                onCurrentIndexChanged: {
++                    if (currentIndex >= 0 && activeFocus) {
++                        Wallpaper.WallpaperUtil.pick(model[currentIndex].id);
++                    }
++                }
++
++                delegate: AbstractButton {
++                    id: delegate
++
++                    required property var modelData
++                    required property int index
++                    readonly property bool selected: modelData.id === Wallpaper.WallpaperUtil.selected
++
++                    width: grid.cellWidth
++                    height: grid.cellHeight
++                    padding: Kirigami.Units.largeSpacing / 2
++                    hoverEnabled: true
++                    focusPolicy: Qt.StrongFocus
++
++                    text: modelData.name
++                    Accessible.role: Accessible.RadioButton
++                    Accessible.checked: selected
++                    Accessible.description: modelData.author
++
++                    onClicked: {
++                        grid.currentIndex = index;
++                        Wallpaper.WallpaperUtil.pick(modelData.id);
++                    }
++
++                    contentItem: ColumnLayout {
++                        spacing: Kirigami.Units.smallSpacing
++
++                        Kirigami.ShadowedImage {
++                            Layout.fillWidth: true
++                            Layout.preferredHeight: Math.round(width * 9 / 16)
++
++                            source: grid.dark ? delegate.modelData.previewDark : delegate.modelData.preview
++                            sourceSize.width: width * Screen.devicePixelRatio
++                            fillMode: Image.PreserveAspectCrop
++                            asynchronous: true
++                            color: Kirigami.Theme.alternateBackgroundColor
++                            radius: Kirigami.Units.cornerRadius
++
++                            border.width: delegate.selected ? 2 : 1
++                            border.color: delegate.selected ? Kirigami.Theme.highlightColor
++                                : delegate.hovered || delegate.visualFocus ? Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.highlightColor, 0.6)
++                                : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.15)
++
++                            // The pick, marked like the selection in System Settings' wallpaper grid
++                            Rectangle {
++                                anchors.top: parent.top
++                                anchors.right: parent.right
++                                anchors.margins: Kirigami.Units.smallSpacing
++                                width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
++                                height: width
++                                radius: width / 2
++                                visible: delegate.selected
++                                // highlightedTextColor comes out dark with BlossomUI, the
++                                // Selection colours are right
++                                Kirigami.Theme.colorSet: Kirigami.Theme.Selection
++                                Kirigami.Theme.inherit: false
++                                color: Kirigami.Theme.backgroundColor
++
++                                Kirigami.Icon {
++                                    anchors.centerIn: parent
++                                    width: Kirigami.Units.iconSizes.small
++                                    height: width
++                                    source: "emblem-ok-symbolic"
++                                    isMask: true
++                                    roundToIconSize: false
++                                    color: Kirigami.Theme.textColor
++                                }
++                            }
++                        }
++
++                        Label {
++                            Layout.fillWidth: true
++                            text: delegate.text
++                            elide: Text.ElideRight
++                            horizontalAlignment: Text.AlignHCenter
++                            font.weight: delegate.selected ? Font.DemiBold : Font.Normal
++                        }
++                    }
++                }
++            }
++        }
++
++        // Where the wallpaper goes
++        Flow {
++            Layout.alignment: Qt.AlignHCenter
++            Layout.maximumWidth: parent.width
++            Layout.topMargin: Kirigami.Units.smallSpacing
++            visible: root.hasWallpapers
++            spacing: Kirigami.Units.largeSpacing
++
++            ButtonGroup {
++                id: targetGroup
++            }
++
++            Label {
++                height: targets.count > 0 ? targets.itemAt(0).height : implicitHeight
++                verticalAlignment: Text.AlignVCenter
++                text: i18n("Use for:")
++            }
++
++            Repeater {
++                id: targets
++
++                model: [
++                    { target: Wallpaper.WallpaperUtil.DesktopAndLockScreen, text: i18n("Desktop and lock screen") },
++                    { target: Wallpaper.WallpaperUtil.Desktop, text: i18n("Desktop only") },
++                    { target: Wallpaper.WallpaperUtil.LockScreen, text: i18n("Lock screen only") },
++                ]
++
++                delegate: RadioButton {
++                    required property var modelData
++
++                    ButtonGroup.group: targetGroup
++                    text: modelData.text
++                    checked: Wallpaper.WallpaperUtil.target === modelData.target
++                    onToggled: Wallpaper.WallpaperUtil.target = modelData.target
++                }
++            }
++        }
++    }
++}
+diff --git a/modules/wallpaper/metadata.json b/modules/appearance/metadata.json
+similarity index 50%
+rename from modules/wallpaper/metadata.json
+rename to modules/appearance/metadata.json
+index 7bd516b..75f5231 100644
+--- a/modules/wallpaper/metadata.json
++++ b/modules/appearance/metadata.json
+@@ -7,15 +7,15 @@
+                 "Name": "Leonie Ain"
+             }
+         ],
+-        "Description": "Allow the user to choose the desktop wallpaper.",
+-        "Description[de]": "Dem Benutzer erlauben, das Hintergrundbild der Arbeitsfläche auszuwählen.",
+-        "Id": "org.kde.plasmasetup.wallpaper",
++        "Description": "Allow the user to choose the theme, accent color and wallpaper.",
++        "Description[de]": "Dem Benutzer erlauben, das Design, die Akzentfarbe und das Hintergrundbild auszuwählen.",
++        "Id": "org.kde.plasmasetup.appearance",
+         "License": "GPL-2.0-or-later",
+-        "Name": "Wallpaper",
+-        "Name[de]": "Hintergrundbild",
++        "Name": "Appearance",
++        "Name[de]": "Erscheinungsbild",
+         "Website": "https://blossomos.org"
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 15
++    "X-KDE-Weight": 10
+ }
+diff --git a/modules/wallpaper/metadata.json.license b/modules/appearance/metadata.json.license
+similarity index 100%
+rename from modules/wallpaper/metadata.json.license
+rename to modules/appearance/metadata.json.license
+diff --git a/modules/prepareutil/prepareutil.cpp b/modules/prepareutil/prepareutil.cpp
+index f818277..9045803 100644
+--- a/modules/prepareutil/prepareutil.cpp
++++ b/modules/prepareutil/prepareutil.cpp
+@@ -11,9 +11,13 @@
+ #include <KConfigGroup>
+ #include <KSharedConfig>
+ 
++#include <QColor>
++#include <QDBusConnection>
++#include <QDBusMessage>
+ #include <QDBusPendingCallWatcher>
+ #include <QDBusPendingReply>
+ #include <QProcess>
++#include <QStandardPaths>
+ 
+ using namespace Qt::StringLiterals;
+ 
+@@ -35,6 +39,107 @@ void applyBlossomDefaults(bool dark)
+     mouse.writeEntry("cursorSize", 20, KConfig::Notify);
+     input->sync();
+ }
++
++QString schemePath(bool dark)
++{
++    return QStandardPaths::locate(QStandardPaths::GenericDataLocation, dark ? u"color-schemes/BlossomUIDark.colors"_s : u"color-schemes/BlossomUILight.colors"_s);
++}
++
++QString colorToEntry(const QColor &color)
++{
++    return u"%1,%2,%3"_s.arg(color.red()).arg(color.green()).arg(color.blue());
++}
++
++// Writes the scheme's colours into kdeglobals with the accent colour in place
++// of its own, as quick-appearance-kcm does, or the scheme's colours as they
++// are for an invalid accent
++void bakeAccentColor(const QColor &accent, bool dark)
++{
++    const QString path = schemePath(dark);
++    if (path.isEmpty()) {
++        return;
++    }
++    KConfig scheme(path, KConfig::SimpleConfig);
++    auto globals = KSharedConfig::openConfig(u"kdeglobals"_s);
++    globals->reparseConfiguration();
++    const bool hasAccent = accent.isValid();
++
++    // Crossfade, as KWin does for System Settings
++    QDBusMessage blend = QDBusMessage::createMethodCall(u"org.kde.KWin"_s, u"/org/kde/KWin/BlendChanges"_s, u"org.kde.KWin.BlendChanges"_s, u"start"_s);
++    blend << 300;
++    QDBusConnection::sessionBus().call(blend);
++
++    static const QStringList groups{
++        u"Colors:View"_s,
++        u"Colors:Window"_s,
++        u"Colors:Button"_s,
++        u"Colors:Selection"_s,
++        u"Colors:Tooltip"_s,
++        u"Colors:Complementary"_s,
++        u"Colors:Header"_s,
++    };
++    static const QStringList keys{
++        u"BackgroundNormal"_s,
++        u"BackgroundAlternate"_s,
++        u"ForegroundNormal"_s,
++        u"ForegroundInactive"_s,
++        u"ForegroundActive"_s,
++        u"ForegroundLink"_s,
++        u"ForegroundVisited"_s,
++        u"ForegroundNegative"_s,
++        u"ForegroundNeutral"_s,
++        u"ForegroundPositive"_s,
++        u"DecorationFocus"_s,
++        u"DecorationHover"_s,
++    };
++    static const QStringList accentKeys{
++        u"ForegroundActive"_s,
++        u"ForegroundLink"_s,
++        u"DecorationFocus"_s,
++        u"DecorationHover"_s,
++    };
++
++    for (const QString &name : groups) {
++        if (name == u"Colors:Header"_s && !scheme.hasGroup(name)) {
++            continue;
++        }
++        const KConfigGroup source = scheme.group(name);
++        KConfigGroup group = globals->group(name);
++        for (const QString &key : keys) {
++            const QString value = hasAccent && accentKeys.contains(key) ? colorToEntry(accent) : source.readEntry(key, QString());
++            if (value.isEmpty()) {
++                group.deleteEntry(key, KConfig::Notify);
++            } else {
++                group.writeEntry(key, value, KConfig::Notify);
++            }
++        }
++        if (name == u"Colors:Selection"_s && hasAccent) {
++            group.writeEntry("BackgroundNormal", colorToEntry(accent), KConfig::Notify);
++            group.writeEntry("BackgroundAlternate", colorToEntry(accent), KConfig::Notify);
++            // Dark text on light accents
++            const qreal luma = (0.299 * accent.red() + 0.587 * accent.green() + 0.114 * accent.blue()) / 255.0;
++            if (luma > 0.55) {
++                group.writeEntry("ForegroundNormal", u"18,20,30"_s, KConfig::Notify);
++                group.writeEntry("ForegroundInactive", u"45,48,60"_s, KConfig::Notify);
++            }
++        }
++        if (name == u"Colors:Button"_s && hasAccent) {
++            group.writeEntry("BackgroundAlternate", colorToEntry(accent), KConfig::Notify);
++        }
++    }
++
++    // The auth helper merges this into the new user's kdeglobals
++    if (hasAccent) {
++        globals->group(u"General"_s).writeEntry("AccentColor", colorToEntry(accent), KConfig::Notify);
++    } else {
++        globals->group(u"General"_s).deleteEntry("AccentColor", KConfig::Notify);
++    }
++    globals->sync();
++
++    QDBusMessage message = QDBusMessage::createSignal(u"/KGlobalSettings"_s, u"org.kde.KGlobalSettings"_s, u"notifyChange"_s);
++    message.setArguments({0 /* PaletteChanged */, 0});
++    QDBusConnection::sessionBus().send(message);
++}
+ }
+ 
+ PrepareUtil::PrepareUtil(QObject *parent)
+@@ -61,7 +166,15 @@ PrepareUtil::PrepareUtil(QObject *parent)
+     // set property initially
+     // The colour scheme's name isn't reliable after applying a look and feel,
+     // the look and feel package is
+-    m_usingDarkTheme = KSharedConfig::openConfig(u"kdeglobals"_s)->group(u"KDE"_s).readEntry("LookAndFeelPackage") == u"org.blossomos.ui.dark.desktop"_s;
++    auto globals = KSharedConfig::openConfig(u"kdeglobals"_s);
++    m_usingDarkTheme = globals->group(u"KDE"_s).readEntry("LookAndFeelPackage") == u"org.blossomos.ui.dark.desktop"_s;
++
++    const QColor accent = globals->group(u"General"_s).readEntry("AccentColor", QColor());
++    if (accent.isValid()) {
++        m_accentColor = accent.name();
++        // Setup refreshes the scheme's colours when it starts again
++        bakeAccentColor(accent, m_usingDarkTheme);
++    }
+ }
+ 
+ int PrepareUtil::scaling() const
+@@ -123,9 +236,45 @@ void PrepareUtil::setUsingDarkTheme(bool usingDarkTheme)
+         QProcess::execute(u"plasma-apply-lookandfeel"_s, {QStringLiteral("--apply"), QStringLiteral("org.blossomos.ui.light.desktop")});
+     }
+     applyBlossomDefaults(usingDarkTheme);
++    // The look and feel brought its scheme's accent colour back
++    if (!m_accentColor.isEmpty()) {
++        bakeAccentColor(QColor(m_accentColor), usingDarkTheme);
++    }
+ 
+     m_usingDarkTheme = usingDarkTheme;
+     Q_EMIT usingDarkThemeChanged();
+ }
+ 
++QString PrepareUtil::accentColor() const
++{
++    return m_accentColor;
++}
++
++void PrepareUtil::setAccentColor(const QString &accentColor)
++{
++    // The scheme's own counts as none, so the scheme can change it later
++    const QColor requested(accentColor);
++    if (!accentColor.isEmpty() && !requested.isValid()) {
++        return;
++    }
++    const QString color = accentColor.isEmpty() || requested == QColor(schemeAccentColor()) ? QString() : requested.name();
++    if (color == m_accentColor) {
++        return;
++    }
++    bakeAccentColor(QColor(color), m_usingDarkTheme);
++
++    m_accentColor = color;
++    Q_EMIT accentColorChanged();
++}
++
++QString PrepareUtil::schemeAccentColor() const
++{
++    const QString path = schemePath(m_usingDarkTheme);
++    if (path.isEmpty()) {
++        return QString();
++    }
++    const QColor color = KConfig(path, KConfig::SimpleConfig).group(u"Colors:Selection"_s).readEntry("BackgroundNormal", QColor());
++    return color.isValid() ? color.name() : QString();
++}
++
+ #include "moc_prepareutil.cpp"
+diff --git a/modules/prepareutil/prepareutil.h b/modules/prepareutil/prepareutil.h
+index b5d1bef..d77aa87 100644
+--- a/modules/prepareutil/prepareutil.h
++++ b/modules/prepareutil/prepareutil.h
+@@ -20,6 +20,11 @@ class PrepareUtil : public QObject
+     Q_PROPERTY(int scaling READ scaling WRITE setScaling NOTIFY scalingChanged)
+     Q_PROPERTY(QStringList scalingOptions READ scalingOptions CONSTANT)
+     Q_PROPERTY(bool usingDarkTheme READ usingDarkTheme WRITE setUsingDarkTheme NOTIFY usingDarkThemeChanged)
++    // The accent colour picked over the colour scheme's, as #rrggbb, or empty
++    // for the scheme's own
++    Q_PROPERTY(QString accentColor READ accentColor WRITE setAccentColor NOTIFY accentColorChanged)
++    // The colour scheme's own accent colour, as #rrggbb
++    Q_PROPERTY(QString schemeAccentColor READ schemeAccentColor NOTIFY usingDarkThemeChanged)
+ 
+ public:
+     explicit PrepareUtil(QObject *parent = nullptr);
+@@ -32,13 +37,20 @@ public:
+     bool usingDarkTheme() const;
+     void setUsingDarkTheme(bool usingDarkTheme);
+ 
++    QString accentColor() const;
++    void setAccentColor(const QString &accentColor);
++
++    QString schemeAccentColor() const;
++
+ Q_SIGNALS:
+     void scalingChanged();
+     void usingDarkThemeChanged();
++    void accentColorChanged();
+ 
+ private:
+     int m_scaling;
+     bool m_usingDarkTheme;
++    QString m_accentColor;
+ 
+     ColorsSettings *m_colorsSettings;
+     KScreen::ConfigPtr m_config;
+diff --git a/modules/wallpaper/contents/ui/main.qml b/modules/wallpaper/contents/ui/main.qml
+deleted file mode 100644
+index fc04cfc..0000000
+--- a/modules/wallpaper/contents/ui/main.qml
++++ /dev/null
+@@ -1,144 +0,0 @@
+-// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
+-// SPDX-License-Identifier: GPL-2.0-or-later
+-
+-pragma ComponentBehavior: Bound
+-
+-import QtQuick
+-import QtQuick.Controls
+-import QtQuick.Layouts
+-import QtQuick.Window
+-
+-import org.kde.kirigami as Kirigami
+-import org.kde.plasmasetup.wallpaperutil as Wallpaper
+-
+-import org.kde.plasmasetup.components as PlasmaSetupComponents
+-
+-/**
+-* @brief Module for choosing the desktop wallpaper
+-*
+-* Shows the wallpapers listed in plasma-setup/wallpapers.json as a grid of
+-* thumbnails, in their dark variant while the dark theme is on.
+-*/
+-PlasmaSetupComponents.SetupModule {
+-    id: root
+-
+-    // Nothing to choose from with a single wallpaper
+-    available: Wallpaper.WallpaperUtil.wallpapers.length > 1
+-    nextEnabled: true
+-
+-    contentItem: ColumnLayout {
+-        spacing: Kirigami.Units.smallSpacing
+-
+-        Label {
+-            Layout.leftMargin: Kirigami.Units.gridUnit
+-            Layout.rightMargin: Kirigami.Units.gridUnit
+-            Layout.bottomMargin: Kirigami.Units.gridUnit
+-            Layout.fillWidth: true
+-
+-            wrapMode: Text.Wrap
+-            horizontalAlignment: Text.AlignHCenter
+-            text: i18n("Choose a wallpaper for your desktop. You can change it later in System Settings.")
+-        }
+-
+-        ScrollView {
+-            Layout.fillWidth: true
+-            Layout.fillHeight: true
+-
+-            GridView {
+-                id: grid
+-
+-                readonly property bool dark: Kirigami.ColorUtils.brightnessForColor(Kirigami.Theme.backgroundColor) === Kirigami.ColorUtils.Dark
+-                readonly property int columns: Math.max(2, Math.floor(width / (Kirigami.Units.gridUnit * 9)))
+-
+-                clip: true
+-                keyNavigationEnabled: true
+-                cellWidth: Math.floor(width / columns)
+-                cellHeight: Math.round((cellWidth - Kirigami.Units.largeSpacing) * 9 / 16) + Kirigami.Units.largeSpacing * 2 + Kirigami.Units.gridUnit
+-                model: Wallpaper.WallpaperUtil.wallpapers
+-                currentIndex: model.findIndex(wallpaper => wallpaper.id === Wallpaper.WallpaperUtil.selected)
+-                // Arrow keys pick, like in a group of radio buttons
+-                onCurrentIndexChanged: {
+-                    if (currentIndex >= 0) {
+-                        Wallpaper.WallpaperUtil.selected = model[currentIndex].id;
+-                    }
+-                }
+-
+-                delegate: AbstractButton {
+-                    id: delegate
+-
+-                    required property var modelData
+-                    required property int index
+-                    readonly property bool selected: modelData.id === Wallpaper.WallpaperUtil.selected
+-
+-                    width: grid.cellWidth
+-                    height: grid.cellHeight
+-                    padding: Kirigami.Units.largeSpacing / 2
+-                    hoverEnabled: true
+-                    focusPolicy: Qt.StrongFocus
+-
+-                    text: modelData.name
+-                    Accessible.role: Accessible.RadioButton
+-                    Accessible.checked: selected
+-                    Accessible.description: modelData.author
+-
+-                    onClicked: grid.currentIndex = index
+-
+-                    contentItem: ColumnLayout {
+-                        spacing: Kirigami.Units.smallSpacing
+-
+-                        Kirigami.ShadowedImage {
+-                            Layout.fillWidth: true
+-                            Layout.preferredHeight: Math.round(width * 9 / 16)
+-
+-                            source: grid.dark ? delegate.modelData.previewDark : delegate.modelData.preview
+-                            sourceSize.width: width * Screen.devicePixelRatio
+-                            fillMode: Image.PreserveAspectCrop
+-                            asynchronous: true
+-                            color: Kirigami.Theme.alternateBackgroundColor
+-                            radius: Kirigami.Units.cornerRadius
+-
+-                            border.width: delegate.selected ? 2 : 1
+-                            border.color: delegate.selected ? Kirigami.Theme.highlightColor
+-                                : delegate.hovered || delegate.visualFocus ? Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.highlightColor, 0.6)
+-                                : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.15)
+-
+-                            // The pick, marked like the selection in System Settings' wallpaper grid
+-                            Rectangle {
+-                                anchors.top: parent.top
+-                                anchors.right: parent.right
+-                                anchors.margins: Kirigami.Units.smallSpacing
+-                                width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+-                                height: width
+-                                radius: width / 2
+-                                visible: delegate.selected
+-                                // highlightedTextColor comes out dark with BlossomUI, the
+-                                // Selection colours are right
+-                                Kirigami.Theme.colorSet: Kirigami.Theme.Selection
+-                                Kirigami.Theme.inherit: false
+-                                color: Kirigami.Theme.backgroundColor
+-
+-                                Kirigami.Icon {
+-                                    anchors.centerIn: parent
+-                                    width: Kirigami.Units.iconSizes.small
+-                                    height: width
+-                                    source: "emblem-ok-symbolic"
+-                                    isMask: true
+-                                    roundToIconSize: false
+-                                    color: Kirigami.Theme.textColor
+-                                }
+-                            }
+-                        }
+-
+-                        Label {
+-                            Layout.fillWidth: true
+-                            text: delegate.text
+-                            elide: Text.ElideRight
+-                            horizontalAlignment: Text.AlignHCenter
+-                            font.weight: delegate.selected ? Font.DemiBold : Font.Normal
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-    }
+-}
+diff --git a/modules/wallpaperutil/wallpaperutil.cpp b/modules/wallpaperutil/wallpaperutil.cpp
+index 7e680d6..070ea7f 100644
+--- a/modules/wallpaperutil/wallpaperutil.cpp
++++ b/modules/wallpaperutil/wallpaperutil.cpp
+@@ -23,29 +23,35 @@ using namespace Qt::StringLiterals;
+ 
+ namespace
+ {
+-// The smallest landscape image in a wallpaper package's images dir, as
+-// thumbnails don't need more and big PNGs are slow to decode. Images are
+-// named after their size, like 3840x2160.png
+-QString smallestLandscapeImage(const QString &imagesDir)
++// The images in a wallpaper package's images dir by size, as they are named
++// after it, like 3840x2160.png
++QList<std::pair<QSize, QString>> sizedImages(const QString &imagesDir)
+ {
+     static const QRegularExpression sizeName(u"^(\\d+)x(\\d+)\\."_s);
+ 
+-    QString best;
+-    qint64 bestArea = 0;
++    QList<std::pair<QSize, QString>> images;
+     const QStringList files = QDir(imagesDir).entryList(QDir::Files, QDir::Name);
+     for (const QString &file : files) {
+         const QRegularExpressionMatch match = sizeName.match(file);
+-        if (!match.hasMatch()) {
+-            continue;
++        if (match.hasMatch()) {
++            images.append({QSize(match.captured(1).toInt(), match.captured(2).toInt()), imagesDir + u'/' + file});
+         }
+-        const qint64 width = match.captured(1).toLongLong();
+-        const qint64 height = match.captured(2).toLongLong();
+-        if (width < height) {
+-            continue;
+-        }
+-        if (best.isEmpty() || width * height < bestArea) {
+-            best = imagesDir + u'/' + file;
+-            bestArea = width * height;
++    }
++    return images;
++}
++
++// The smallest landscape image in a wallpaper package's images dir, as
++// thumbnails don't need more and big PNGs are slow to decode
++QString smallestLandscapeImage(const QString &imagesDir)
++{
++    QString best;
++    qint64 bestArea = 0;
++    const auto images = sizedImages(imagesDir);
++    for (const auto &[size, path] : images) {
++        const qint64 area = qint64(size.width()) * size.height();
++        if (size.width() >= size.height() && (best.isEmpty() || area < bestArea)) {
++            best = path;
++            bestArea = area;
+         }
+     }
+     return best;
+@@ -93,6 +99,10 @@ WallpaperUtil::WallpaperUtil(QObject *parent)
+     const QString saved = QDir(KSharedConfig::openConfig(u"plasma-setuprc"_s)->group(u"Wallpaper"_s).readEntry("Image")).dirName();
+     const QString preselected = list.value("default"_L1).toString();
+     m_selected = ids.contains(saved) ? saved : ids.contains(preselected) ? preselected : ids.first();
++    const KConfigGroup savedGroup = KSharedConfig::openConfig(u"plasma-setuprc"_s)->group(u"Wallpaper"_s);
++    const bool desktop = savedGroup.readEntry("Desktop", true);
++    const bool lockScreen = savedGroup.readEntry("LockScreen", true);
++    m_target = desktop && !lockScreen ? Desktop : lockScreen && !desktop ? LockScreen : DesktopAndLockScreen;
+     save();
+ }
+ 
+@@ -123,11 +133,79 @@ void WallpaperUtil::setSelected(const QString &selected)
+     Q_EMIT selectedChanged();
+ }
+ 
++bool WallpaperUtil::picked() const
++{
++    return m_picked;
++}
++
++void WallpaperUtil::pick(const QString &id)
++{
++    setSelected(id);
++    if (m_picked || id != m_selected) {
++        return;
++    }
++    m_picked = true;
++    Q_EMIT pickedChanged();
++}
++
++WallpaperUtil::Target WallpaperUtil::target() const
++{
++    return m_target;
++}
++
++void WallpaperUtil::setTarget(Target target)
++{
++    if (target == m_target) {
++        return;
++    }
++    m_target = target;
++    save();
++    Q_EMIT targetChanged();
++}
++
++QUrl WallpaperUtil::image(const QString &id, bool dark, const QSize &size) const
++{
++    const QString dir = QStandardPaths::locate(QStandardPaths::GenericDataLocation, u"wallpapers/"_s + id, QStandardPaths::LocateDirectory);
++    if (id.isEmpty() || id.contains(u'/') || dir.isEmpty()) {
++        return QUrl();
++    }
++    QList<std::pair<QSize, QString>> images;
++    if (dark) {
++        images = sizedImages(dir + u"/contents/images_dark"_s);
++    }
++    if (images.isEmpty()) {
++        images = sizedImages(dir + u"/contents/images"_s);
++    }
++    // The screen's orientation first, then by area
++    const bool landscape = size.width() >= size.height();
++    const auto rank = [landscape](const QSize &imageSize) {
++        return std::pair((imageSize.width() >= imageSize.height()) != landscape, qint64(imageSize.width()) * imageSize.height());
++    };
++    std::sort(images.begin(), images.end(), [&rank](const auto &a, const auto &b) {
++        return rank(a.first) < rank(b.first);
++    });
++    // The first that covers the screen, or else the biggest
++    QString best;
++    for (const auto &[imageSize, path] : std::as_const(images)) {
++        if ((imageSize.width() >= imageSize.height()) != landscape && !best.isEmpty()) {
++            break;
++        }
++        best = path;
++        if (imageSize.width() >= size.width() && imageSize.height() >= size.height()) {
++            break;
++        }
++    }
++    return best.isEmpty() ? QUrl() : QUrl::fromLocalFile(best);
++}
++
+ void WallpaperUtil::save() const
+ {
+     auto config = KSharedConfig::openConfig(u"plasma-setuprc"_s);
+     const QString dir = QStandardPaths::locate(QStandardPaths::GenericDataLocation, u"wallpapers/"_s + m_selected, QStandardPaths::LocateDirectory);
+-    config->group(u"Wallpaper"_s).writeEntry("Image", dir);
++    KConfigGroup group = config->group(u"Wallpaper"_s);
++    group.writeEntry("Image", dir);
++    group.writeEntry("Desktop", m_target != LockScreen);
++    group.writeEntry("LockScreen", m_target != Desktop);
+     config->sync();
+ }
+ 
+diff --git a/modules/wallpaperutil/wallpaperutil.h b/modules/wallpaperutil/wallpaperutil.h
+index a0f1bfe..8bf83ad 100644
+--- a/modules/wallpaperutil/wallpaperutil.h
++++ b/modules/wallpaperutil/wallpaperutil.h
+@@ -4,16 +4,19 @@
+ #pragma once
+ 
+ #include <QObject>
++#include <QSize>
++#include <QUrl>
+ #include <QVariantList>
+ #include <qqmlintegration.h>
+ 
+ /*!
+- * The wallpapers offered on the wallpaper page, and the one picked.
++ * The wallpapers offered on the appearance page, the one picked and where it
++ * goes.
+  *
+  * The list comes from plasma-setup/wallpapers.json in the data dirs: wallpaper
+  * package names from /usr/share/wallpapers and the one to preselect. The pick
+  * is kept in the setup user's plasma-setuprc, where the auth helper reads it
+- * to set the new user's desktop wallpaper.
++ * to set the new user's desktop and lock screen wallpaper.
+  */
+ class WallpaperUtil : public QObject
+ {
+@@ -32,7 +35,25 @@ class WallpaperUtil : public QObject
+      */
+     Q_PROPERTY(QString selected READ selected WRITE setSelected NOTIFY selectedChanged)
+ 
++    /*!
++     * Whether the user picked a wallpaper themselves, rather than leaving the
++     * preselected one. Setup's backdrop shows it from then on.
++     */
++    Q_PROPERTY(bool picked READ picked NOTIFY pickedChanged)
++
++    /*!
++     * Where the picked wallpaper goes.
++     */
++    Q_PROPERTY(Target target READ target WRITE setTarget NOTIFY targetChanged)
++
+ public:
++    enum Target {
++        DesktopAndLockScreen,
++        Desktop,
++        LockScreen,
++    };
++    Q_ENUM(Target)
++
+     explicit WallpaperUtil(QObject *parent = nullptr);
+ 
+     QVariantList wallpapers() const;
+@@ -40,12 +61,32 @@ public:
+     QString selected() const;
+     void setSelected(const QString &selected);
+ 
++    bool picked() const;
++
++    Target target() const;
++    void setTarget(Target target);
++
++    /*!
++     * Selects the wallpaper \a id as the user's own pick.
++     */
++    Q_INVOKABLE void pick(const QString &id);
++
++    /*!
++     * The smallest image of the wallpaper \a id that covers \a size pixels,
++     * or else its biggest, in its dark variant for \a dark when it has one.
++     */
++    Q_INVOKABLE QUrl image(const QString &id, bool dark, const QSize &size) const;
++
+ Q_SIGNALS:
+     void selectedChanged();
++    void pickedChanged();
++    void targetChanged();
+ 
+ private:
+     void save() const;
+ 
+     QVariantList m_wallpapers;
+     QString m_selected;
++    bool m_picked = false;
++    Target m_target = DesktopAndLockScreen;
+ };
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index 1dc269a..0e569fd 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -295,7 +295,7 @@ msgstr "Bitte wähle deine bevorzugte Sprache aus."
+ msgid "Search languages…"
+ msgstr "Sprachen durchsuchen …"
+ 
+-#: modules/prepare/contents/ui/main.qml:76
++#: modules/appearance/contents/ui/main.qml:118
+ #, kde-format
+ msgid "Dark Theme"
+ msgstr "Dunkles Design"
+@@ -391,14 +391,43 @@ msgctxt "@action:button"
+ msgid "Finish"
+ msgstr "Abschließen"
+ 
+-#: modules/wallpaper/contents/ui/main.qml:40
++#: modules/appearance/contents/ui/main.qml:110
+ #, kde-format
+ msgid ""
+-"Choose a wallpaper for your desktop. You can change it later in System "
+-"Settings."
++"Choose how your desktop looks. You can change it later in System Settings."
+ msgstr ""
+-"Wähle ein Hintergrundbild für deine Arbeitsfläche. Du kannst es später in "
+-"den Systemeinstellungen ändern."
++"Wähle aus, wie deine Arbeitsfläche aussieht. Du kannst das später in den "
++"Systemeinstellungen ändern."
++
++#: modules/appearance/contents/ui/main.qml:139
++#, kde-format
++msgid "Accent Color"
++msgstr "Akzentfarbe"
++
++#: modules/appearance/contents/ui/main.qml:167
++#, kde-format
++msgid "Wallpaper"
++msgstr "Hintergrundbild"
++
++#: modules/appearance/contents/ui/main.qml:290
++#, kde-format
++msgid "Use for:"
++msgstr "Verwenden für:"
++
++#: modules/appearance/contents/ui/main.qml:297
++#, kde-format
++msgid "Desktop and lock screen"
++msgstr "Arbeitsfläche und Sperrbildschirm"
++
++#: modules/appearance/contents/ui/main.qml:298
++#, kde-format
++msgid "Desktop only"
++msgstr "Nur Arbeitsfläche"
++
++#: modules/appearance/contents/ui/main.qml:299
++#, kde-format
++msgid "Lock screen only"
++msgstr "Nur Sperrbildschirm"
+ 
+ #: modules/updates/contents/ui/main.qml:76
+ #, kde-format
+@@ -489,7 +518,7 @@ msgctxt "%1 is a browser, %2 the error"
+ msgid "Couldn't install %1: %2"
+ msgstr "%1 konnte nicht installiert werden: %2"
+ 
+-#: modules/browser/contents/ui/main.qml:140
++#: modules/browser/contents/ui/main.qml:139
+ #, kde-format
+ msgid "Removing…"
+ msgstr "Wird entfernt …"
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index dc1aacc..a0fae89 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -447,7 +447,7 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+         return makeErrorReply(QStringLiteral("Error copying file to temporary location: ") + QString::fromStdString(e.what()));
+     }
+ 
+-    // What was picked on the wallpaper and browser pages, if they were shown
++    // What was picked on the appearance and browser pages, if they were shown
+     std::unique_ptr<QTemporaryFile> setupFile;
+     const QString setupSourcePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config/plasma-setuprc");
+     if (QFile::exists(setupSourcePath)) {
+@@ -526,13 +526,16 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+         }
+ 
+         // Put the picked wallpaper on the desktop containment(s) of the layout
+-        // /etc/skel gave the new user. Only installed wallpapers, the setup
+-        // user can write anything into its config
+-        const QString wallpaper = setupFile
+-            ? QDir::cleanPath(KConfig(setupFile->fileName(), KConfig::SimpleConfig).group(QStringLiteral("Wallpaper")).readEntry("Image"))
+-            : QString();
++        // /etc/skel gave the new user, and on the lock screen, as picked.
++        // Only installed wallpapers, the setup user can write anything into
++        // its config
++        const KConfig setupConfig(setupFile ? setupFile->fileName() : QString(), KConfig::SimpleConfig);
++        const KConfigGroup wallpaperGroup = setupConfig.group(QStringLiteral("Wallpaper"));
++        const QString wallpaper = setupFile ? QDir::cleanPath(wallpaperGroup.readEntry("Image")) : QString();
++        const QString wallpaperUrl = QUrl::fromLocalFile(wallpaper + QLatin1Char('/')).toString();
++        const bool wallpaperInstalled = wallpaper.startsWith(QLatin1String("/usr/share/wallpapers/")) && QFileInfo(wallpaper).isDir();
+         const QString appletsPath = QDir::cleanPath(configDirPath + QStringLiteral("/plasma-org.kde.plasma.desktop-appletsrc"));
+-        if (wallpaper.startsWith(QLatin1String("/usr/share/wallpapers/")) && QFileInfo(wallpaper).isDir() && QFile::exists(appletsPath)) {
++        if (wallpaperInstalled && wallpaperGroup.readEntry("Desktop", true) && QFile::exists(appletsPath)) {
+             KConfig applets(appletsPath, KConfig::SimpleConfig);
+             KConfigGroup containments = applets.group(QStringLiteral("Containments"));
+             const QStringList ids = containments.groupList();
+@@ -545,18 +548,29 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+                 containment.group(QStringLiteral("Wallpaper"))
+                     .group(QStringLiteral("org.kde.image"))
+                     .group(QStringLiteral("General"))
+-                    .writeEntry("Image", QUrl::fromLocalFile(wallpaper + QLatin1Char('/')).toString());
++                    .writeEntry("Image", wallpaperUrl);
+             }
+             if (!applets.sync()) {
+                 return makeErrorReply(QStringLiteral("Unable to write ") + appletsPath);
+             }
+         }
++        if (wallpaperInstalled && wallpaperGroup.readEntry("LockScreen", true)) {
++            const QString lockerPath = QDir::cleanPath(configDirPath + QStringLiteral("/kscreenlockerrc"));
++            KConfig locker(lockerPath, KConfig::SimpleConfig);
++            KConfigGroup greeter = locker.group(QStringLiteral("Greeter"));
++            greeter.writeEntry("WallpaperPlugin", QStringLiteral("org.kde.image"));
++            KConfigGroup image = greeter.group(QStringLiteral("Wallpaper")).group(QStringLiteral("org.kde.image")).group(QStringLiteral("General"));
++            image.writeEntry("Image", wallpaperUrl);
++            image.writeEntry("PreviewImage", wallpaperUrl);
++            if (!locker.sync()) {
++                return makeErrorReply(QStringLiteral("Unable to write ") + lockerPath);
++            }
++        }
+ 
+         // Make the browser picked on the browser page the default. Only an
+         // installed Flatpak, the setup user can write anything into its config
+         static const QRegularExpression appId(QStringLiteral("^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)+$"));
+-        const QString browser =
+-            setupFile ? KConfig(setupFile->fileName(), KConfig::SimpleConfig).group(QStringLiteral("Browser")).readEntry("Default") : QString();
++        const QString browser = setupFile ? setupConfig.group(QStringLiteral("Browser")).readEntry("Default") : QString();
+         const QString browserDesktopFile = browser + QStringLiteral(".desktop");
+         if (appId.match(browser).hasMatch() && QFile::exists(QStringLiteral("/var/lib/flatpak/exports/share/applications/") + browserDesktopFile)) {
+             const QString mimeAppsPath = QDir::cleanPath(configDirPath + QStringLiteral("/mimeapps.list"));
+diff --git a/src/qml/Backdrop.qml b/src/qml/Backdrop.qml
+index 02b010e..a2916b3 100644
+--- a/src/qml/Backdrop.qml
++++ b/src/qml/Backdrop.qml
+@@ -7,6 +7,7 @@ pragma ComponentBehavior: Bound
+ import QtQuick
+ import QtQuick.Window
+ import org.kde.kirigami as Kirigami
++import org.kde.plasmasetup.wallpaperutil as Wallpaper
+ 
+ Item {
+     id: backdrop
+@@ -36,13 +37,21 @@ Item {
+             { x: 0.48, speed: 0.029, w: 0.70, h: 0.48, alpha: 0.20, phase: 5.0, floor: 0.15 },
+         ]
+ 
+-        Image {
++        // Two images, so a new colour (the accent changed) is rendered off
++        // screen and crossfades over the old one instead of blinking out
++        Item {
+             id: blob
+             required property var modelData
++            required property int index
+             readonly property real a: 2 * Math.PI * modelData.speed * backdrop.t + modelData.phase
+             readonly property real dpr: Screen.devicePixelRatio
+             readonly property int pixelWidth: Math.max(1, Math.round(backdrop.width * modelData.w * dpr))
+             readonly property int pixelHeight: Math.max(1, Math.round(backdrop.height * modelData.h * dpr))
++            readonly property string wanted: backdrop.width > 0
++                ? "image://glow/%1x%2/%3/%4/%5".arg(pixelWidth).arg(pixelHeight).arg(backdrop.glowColor).arg(modelData.alpha).arg(index)
++                : ""
++            property Image front: first
++            readonly property Image back: front === first ? second : first
+ 
+             width: pixelWidth / dpr
+             height: pixelHeight / dpr
+@@ -52,18 +61,137 @@ Item {
+             // Eased between floor and 1
+             opacity: modelData.floor + (1 - modelData.floor) * (0.5 - 0.5 * Math.cos(a))
+ 
+-            required property int index
+-            source: backdrop.width > 0
+-                ? "image://glow/%1x%2/%3/%4/%5".arg(pixelWidth).arg(pixelHeight).arg(backdrop.glowColor).arg(modelData.alpha).arg(index)
+-                : ""
+-            sourceSize: Qt.size(pixelWidth, pixelHeight)
++            onWantedChanged: update()
++            Component.onCompleted: update()
++
++            function update(): void {
++                // A running fade picks up the latest colour when it is done
++                if (fade.running || front.source.toString() === wanted) {
++                    return;
++                }
++                // Nothing to fade from yet
++                if (front.status !== Image.Ready) {
++                    front.source = wanted;
++                    return;
++                }
++                back.opacity = 0;
++                back.source = wanted;
++            }
++
++            component GlowImage: Image {
++                anchors.fill: parent
++                sourceSize: Qt.size(blob.pixelWidth, blob.pixelHeight)
++                asynchronous: true
++                smooth: false
++                onStatusChanged: {
++                    if (status === Image.Ready && this === blob.back && source.toString() === blob.wanted) {
++                        fadeIn.target = this;
++                        fadeOut.target = blob.front;
++                        fade.start();
++                    }
++                }
++            }
++
++            GlowImage {
++                id: first
++            }
++
++            GlowImage {
++                id: second
++                opacity: 0
++            }
++
++            ParallelAnimation {
++                id: fade
++
++                NumberAnimation {
++                    id: fadeIn
++                    property: "opacity"
++                    to: 1
++                    duration: 5000
++                    easing.type: Easing.InOutQuad
++                }
++
++                NumberAnimation {
++                    id: fadeOut
++                    property: "opacity"
++                    to: 0
++                    duration: 5000
++                    easing.type: Easing.InOutQuad
++                }
++
++                onFinished: {
++                    blob.front = fadeIn.target;
++                    blob.update();
++                }
++            }
++        }
++    }
++
++    // The wallpaper picked on the appearance page, over the glow once there
++    // is one. Two images, so a new pick crossfades over the one before
++    Item {
++        id: wallpaper
++
++        readonly property url source: Wallpaper.WallpaperUtil.picked
++            ? Wallpaper.WallpaperUtil.image(Wallpaper.WallpaperUtil.selected, backdrop.dark,
++                                            Qt.size(backdrop.width * Screen.devicePixelRatio, backdrop.height * Screen.devicePixelRatio))
++            : ""
++        property Image front: second
++
++        anchors.fill: parent
++        visible: Wallpaper.WallpaperUtil.picked
++
++        onSourceChanged: {
++            const back = front === first ? second : first;
++            if (back.source.toString() === source.toString() && back.status === Image.Ready) {
++                bringToFront(back);
++            } else {
++                back.source = source;
++            }
++        }
++
++        // Fades the image in over the one before, which stays as it is under it
++        function bringToFront(image: Image): void {
++            front.z = 0;
++            image.z = 1;
++            image.opacity = 0;
++            front = image;
++            fadeIn.target = image;
++            fadeIn.restart();
++        }
++
++        NumberAnimation {
++            id: fadeIn
++            property: "opacity"
++            to: 1
++            duration: Kirigami.Units.veryLongDuration
++            easing.type: Easing.InOutQuad
++        }
++
++        component WallpaperImage: Image {
++            anchors.fill: parent
++            fillMode: Image.PreserveAspectCrop
++            sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
+             asynchronous: true
+-            smooth: false
++            onStatusChanged: {
++                if (status === Image.Ready && wallpaper.front !== this && source.toString() === wallpaper.source.toString()) {
++                    wallpaper.bringToFront(this);
++                }
++            }
++        }
++
++        WallpaperImage {
++            id: first
++        }
++
++        WallpaperImage {
++            id: second
+         }
+     }
+ 
+     NumberAnimation on t {
+-        running: backdrop.animated && backdrop.visible
++        running: backdrop.animated && backdrop.visible && !Wallpaper.WallpaperUtil.picked
+         from: 0
+         to: 3600
+         duration: 3600 * 1000

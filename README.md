@@ -22,7 +22,7 @@ Fedora's `plasma-setup` package with the patches in `patches/` on top. Fedora's 
 ```
 just preview          # try the wizard in a window, nothing on this system changes
 just preview --dark   # same, starting in dark mode
-just preview --page wallpaper  # straight to a page (the end of its plugin id)
+just preview --page appearance  # straight to a page (the end of its plugin id)
 just rpm              # build the RPM (build/rpmbuild/RPMS/)
 just                  # list everything
 ```
@@ -43,11 +43,11 @@ It then installs build dependencies via `dnf builddep` and runs `rpmbuild`.
 - It runs on a private session bus.
 - It sets `PLASMA_SETUP_PREVIEW=1`. With that set, the wizard doesn't create the user, mark setup as done, log out, restart, shut down, or set the hostname, time zone, language, keyboard layout or Wi-Fi.
 
-The Dark Theme switch really runs and only changes the preview. `just screenshot out.png [--dark] [--page NAME]` saves the landing page, or that page.
+The Dark Theme switch and the accent colour really apply and only change the preview. `just screenshot out.png [--dark] [--page NAME]` saves the landing page, or that page.
 
 ## Wallpapers
 
-`wallpapers.json` lists what the wallpaper page offers, by folder name in `/usr/share/wallpapers`, and which one is preselected:
+`wallpapers.json` lists what the appearance page offers, by folder name in `/usr/share/wallpapers`, and which one is preselected:
 
 ```json
 {
@@ -56,7 +56,7 @@ The Dark Theme switch really runs and only changes the preview. `just screenshot
 }
 ```
 
-It is installed as `/usr/share/plasma-setup/wallpapers.json`. Entries that aren't installed are skipped, and with fewer than two left the page isn't shown.
+It is installed as `/usr/share/plasma-setup/wallpapers.json`. Entries that aren't installed are skipped, and with fewer than two left the page shows no wallpapers.
 
 ## Changing the patches
 
@@ -82,3 +82,4 @@ The upstream tree installs a clang-format pre-commit hook. Run `git clang-format
 | 0008 | Wallpaper page | A page after the theme switch that offers the wallpapers in `wallpapers.json` as thumbnails, in their dark variant in dark mode. The pick goes on the new user's desktop along with the theme. |
 | 0009 | Updates page | After the network page: downloads and stages the latest system image through rpm-ostree, with progress, and restarts right away when there was one (setup then starts again). Setup goes on once up to date, or when updating failed. Skipped without internet: pages can now skip themselves with `skipPage()`. The setup user may upgrade and restart without a password. |
 | 0010 | Web browser page | After the updates page: offers the browsers on the Forge browser list (the one the Arc Store shows) as radio buttons. The chosen one is installed right away as a system-wide Flatpak and becomes the new user's default (`mimeapps.list`, kdeglobals), then the others on the list are removed; setup only goes on with one chosen. Skipped without internet. The setup user may install Flatpak apps and runtimes, and remove apps, without a password. |
+| 0012 | Appearance page | The Dark Theme switch moves onto the wallpaper page, now the Appearance page; the "Before we get started" page isn't built any more. It adds an accent colour row with quick-appearance-kcm's palette, baked into kdeglobals the same way (picking BlossomUI's own blue clears it), which reaches the new user with the theme. The wallpaper goes on the desktop, the lock screen (`kscreenlockerrc`) or both. Once one is picked it replaces the glow behind setup, crossfading on each change. The glow itself crossfades to a new accent colour over 5 seconds instead of blinking. |
