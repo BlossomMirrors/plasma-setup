@@ -1,0 +1,93 @@
+#!/usr/bin/bash
+# Run the staged plasma-setup (just build) in a nested KWin window, as the
+# setup session would see it, without touching this system or session:
+# - a throwaway home seeded like tmpfiles seeds /run/plasma-setup, so the
+#   light/dark switch (plasma-apply-lookandfeel) only writes in there
+# - a private session bus, so config change notifications stay in the preview
+# - PLASMA_SETUP_PREVIEW=1, so no user, hostname, locale, time zone, keyboard
+#   layout or Wi-Fi connection is set on the system bus
+# Usage: scripts/preview [--dark] [--page NAME] [--screenshot FILE [--delay MS]] [WIDTH HEIGHT]
+#   --page NAME  go straight to a page, by the end of its plugin id (wallpaper, prepare, ...)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKEL=/etc/skel/.config
+
+# Inside the nested session: run the wizard, or the wizard and a screenshot
+if [[ ${1:-} == --session ]]; then
+    if [[ -z ${PREVIEW_SCREENSHOT:-} ]]; then
+        exec "${PREVIEW_STAGE}/usr/libexec/plasma-setup"
+    fi
+    "${PREVIEW_STAGE}/usr/libexec/plasma-setup" &
+    sleep "$(( ${PREVIEW_DELAY:-6000} / 1000 ))"
+    spectacle --background --nonotify --fullscreen --output "${PREVIEW_SCREENSHOT}"
+    kill %1
+    exit 0
+fi
+
+dark=0
+page=""
+screenshot=""
+delay=6000
+size=()
+while (( $# )); do
+    case $1 in
+        --dark) dark=1 ;;
+        --page) page="$2"; shift ;;
+        --screenshot) screenshot="$(realpath -m "$2")"; shift ;;
+        --delay) delay="$2"; shift ;;
+        *) size+=("$1") ;;
+    esac
+    shift
+done
+width="${size[0]:-1280}"
+height="${size[1]:-800}"
+
+stage="${SCRIPT_DIR}/../build/stage"
+[[ -x ${stage}/usr/libexec/plasma-setup ]] || { echo "Nothing staged, run 'just build' first" >&2; exit 1; }
+stage="$(cd "${stage}" && pwd)"
+
+home="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/plasma-setup-preview.XXXXXX")"
+trap 'rm -rf "${home}"' EXIT
+config="${home}/.config"
+mkdir -p "${config}/autostart" "${home}/.local/share" "${home}/.local/state" "${home}/.cache"
+
+# Same as files/plasma-setup-tmpfiles.conf.in
+for f in kdeglobals kcminputrc plasmarc ksplashrc; do
+    if [[ -f ${SKEL}/${f} ]]; then
+        cp "${SKEL}/${f}" "${config}/${f}"
+    fi
+done
+printf '[General]\nLastSeenVersion=6.4.2\nShowUpdatePage=false\n' >"${config}/plasma-welcomerc"
+printf '[Desktop Entry]\nHidden=true\n' >"${config}/autostart/org.blossomos.Welcome.desktop"
+printf '[Daemon]\nAutolock=false\nLockOnResume=false\nTimeout=0\n' >"${config}/kscreenlockerrc"
+printf '[Wallet]\nEnabled=false\n' >"${config}/kwalletrc"
+
+export HOME="${home}"
+export XDG_CONFIG_HOME="${config}"
+export XDG_DATA_HOME="${home}/.local/share"
+export XDG_STATE_HOME="${home}/.local/state"
+export XDG_CACHE_HOME="${home}/.cache"
+export XDG_DATA_DIRS="${stage}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export QML_IMPORT_PATH="${stage}/usr/lib64/qt6/qml"
+export QT_PLUGIN_PATH="${stage}/usr/lib64/qt6/plugins${QT_PLUGIN_PATH:+:${QT_PLUGIN_PATH}}"
+export QT_FORCE_STDERR_LOGGING=1
+export PLASMA_SETUP_PREVIEW=1
+export PLASMA_SETUP_PREVIEW_PAGE="${page}"
+# Show the account page even though this system has users (upstream switch)
+export PLASMA_SETUP_USER_CREATION_OVERRIDE=1
+export PREVIEW_STAGE="${stage}" PREVIEW_SCREENSHOT="${screenshot}" PREVIEW_DELAY="${delay}"
+# The cursor KWin draws in the window
+XCURSOR_THEME="$(kreadconfig6 --group Mouse --key cursorTheme --file kcminputrc --default Bibata-Modern-Classic)"
+XCURSOR_SIZE="$(kreadconfig6 --group Mouse --key cursorSize --file kcminputrc --default 20)"
+export XCURSOR_THEME XCURSOR_SIZE
+unset DBUS_SESSION_BUS_ADDRESS WAYLAND_SOCKET
+
+session=(kwin_wayland --socket "plasma-setup-preview-$$" --width "${width}" --height "${height}"
+         --exit-with-session "${SCRIPT_DIR}/preview --session")
+if (( dark )); then
+    # What the wizard's Dark Theme switch runs, done before it starts
+    dbus-run-session -- bash -c 'plasma-apply-lookandfeel --apply org.blossomos.ui.dark.desktop >/dev/null && exec "$@"' _ "${session[@]}"
+else
+    dbus-run-session -- "${session[@]}"
+fi

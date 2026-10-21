@@ -1,0 +1,1058 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 05:10:33 +0200
+Subject: [PATCH 09/10] Add an updates page
+
+After the network page, downloads and stages the latest system image
+through rpm-ostree, with the download progress estimated like in
+BlossomOS' Software Update KCM. When the next boot gets a new image,
+it restarts into it right away; setup then starts again. Setup can go
+on once the system is up to date, or when updating failed.
+
+Without an internet connection the page is skipped. For that, pages
+can now implement skipPage(), which the wizard asks right before their
+turn, and InitialStartUtil tells whether NetworkManager is online.
+
+The setup user may upgrade and restart without asking. In a preview
+the download is simulated and nothing restarts.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ files/plasma-setup-polkit.rules       |   3 +
+ modules/CMakeLists.txt                |   4 +
+ modules/updates/CMakeLists.txt        |  12 +
+ modules/updates/contents/ui/main.qml  | 157 ++++++++++
+ modules/updates/metadata.json         |  21 ++
+ modules/updates/metadata.json.license |   2 +
+ modules/updatesutil/CMakeLists.txt    |  22 ++
+ modules/updatesutil/updatesutil.cpp   | 430 ++++++++++++++++++++++++++
+ modules/updatesutil/updatesutil.h     | 125 ++++++++
+ po/de/org.kde.plasmasetup.po          |  58 ++++
+ src/initialstartutil.cpp              |  14 +
+ src/initialstartutil.h                |   6 +
+ src/pagesmodel.cpp                    |   5 +
+ src/pagesmodel.h                      |   5 +
+ src/qml/Wizard.qml                    |   8 +
+ 15 files changed, 872 insertions(+)
+ create mode 100644 modules/updates/CMakeLists.txt
+ create mode 100644 modules/updates/contents/ui/main.qml
+ create mode 100644 modules/updates/metadata.json
+ create mode 100644 modules/updates/metadata.json.license
+ create mode 100644 modules/updatesutil/CMakeLists.txt
+ create mode 100644 modules/updatesutil/updatesutil.cpp
+ create mode 100644 modules/updatesutil/updatesutil.h
+
+diff --git a/files/plasma-setup-polkit.rules b/files/plasma-setup-polkit.rules
+index 10f72e3..cabae84 100644
+--- a/files/plasma-setup-polkit.rules
++++ b/files/plasma-setup-polkit.rules
+@@ -32,6 +32,9 @@ polkit.addRule(function (action, subject) {
+         "org.kde.plasmasetup.setnewuserdisplayscaling", // Set display scaling for new user
+         "org.kde.plasmasetup.setnewusertempautologin", // Set temporary autologin for new user
+         "org.freedesktop.timedate1.set-timezone", // Set system timezone
++        "org.projectatomic.rpmostree1.upgrade", // Download and stage system updates
++        "org.freedesktop.login1.reboot", // Restart into the update
++        "org.freedesktop.login1.reboot-multiple-sessions", // Restart into the update with other sessions open
+     ];
+ 
+     // Check if the current action is in our allowed list.
+diff --git a/modules/CMakeLists.txt b/modules/CMakeLists.txt
+index 97b0b03..b184b8e 100644
+--- a/modules/CMakeLists.txt
++++ b/modules/CMakeLists.txt
+@@ -26,6 +26,9 @@ kpackage_install_package(prepare org.kde.plasmasetup.prepare packages plasma)
+ add_subdirectory(time)
+ kpackage_install_package(time org.kde.plasmasetup.time packages plasma)
+ 
++add_subdirectory(updates)
++kpackage_install_package(updates org.kde.plasmasetup.updates packages plasma)
++
+ add_subdirectory(wallpaper)
+ kpackage_install_package(wallpaper org.kde.plasmasetup.wallpaper packages plasma)
+ 
+@@ -41,4 +44,5 @@ add_subdirectory(hostnameutil)
+ add_subdirectory(languageutil)
+ add_subdirectory(prepareutil)
+ add_subdirectory(timeutil)
++add_subdirectory(updatesutil)
+ add_subdirectory(wallpaperutil)
+diff --git a/modules/updates/CMakeLists.txt b/modules/updates/CMakeLists.txt
+new file mode 100644
+index 0000000..668bb39
+--- /dev/null
++++ b/modules/updates/CMakeLists.txt
+@@ -0,0 +1,12 @@
++# SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++#
++# SPDX-License-Identifier: GPL-2.0-or-later
++
++ecm_add_qml_module(plasmasetup_updates
++    URI "org.kde.plasmasetup.updates"
++    GENERATE_PLUGIN_SOURCE
++    DEPENDENCIES
++        Qt::Core
++)
++
++ecm_finalize_qml_module(plasmasetup_updates)
+diff --git a/modules/updates/contents/ui/main.qml b/modules/updates/contents/ui/main.qml
+new file mode 100644
+index 0000000..753c15c
+--- /dev/null
++++ b/modules/updates/contents/ui/main.qml
+@@ -0,0 +1,157 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Layouts
++
++import org.kde.kirigami as Kirigami
++import org.kde.plasmasetup
++import org.kde.plasmasetup.updatesutil as Updates
++
++import org.kde.plasmasetup.components as PlasmaSetupComponents
++
++/**
++* @brief Module that installs system updates
++*
++* Downloads and stages the latest system image as soon as it is shown, and
++* restarts into it when there was one. Setup can only go on when the system
++* is up to date, or the update failed. Skipped without internet.
++*/
++PlasmaSetupComponents.SetupModule {
++    id: root
++
++    readonly property int updateState: Updates.UpdatesUtil.state
++
++    available: Updates.UpdatesUtil.available
++    nextEnabled: updateState === Updates.UpdatesUtil.UpToDate || updateState === Updates.UpdatesUtil.Failed
++
++    function skipPage(): bool {
++        return !InitialStartUtil.online();
++    }
++
++    function onPageActivated(): void {
++        Updates.UpdatesUtil.start();
++    }
++
++    contentItem: ColumnLayout {
++        spacing: Kirigami.Units.largeSpacing
++
++        Item {
++            Layout.fillHeight: true
++        }
++
++        // Like the outcome in BlossomOS Recovery: the icon on a circle of its
++        // colour at 18%
++        Rectangle {
++            id: badge
++
++            readonly property bool done: root.updateState === Updates.UpdatesUtil.UpToDate || root.updateState === Updates.UpdatesUtil.Restarting
++            readonly property bool failed: root.updateState === Updates.UpdatesUtil.Failed
++            readonly property color tint: done ? Kirigami.Theme.positiveTextColor : failed ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
++
++            Layout.alignment: Qt.AlignHCenter
++            Layout.preferredWidth: 56
++            Layout.preferredHeight: 56
++            radius: width / 2
++            color: done || failed ? Qt.alpha(tint, 0.18) : "transparent"
++
++            Kirigami.Icon {
++                anchors.centerIn: parent
++                width: 32
++                height: 32
++                source: badge.done ? "emblem-ok-symbolic" : badge.failed ? "dialog-warning-symbolic" : "system-software-update-symbolic"
++                isMask: true
++                roundToIconSize: false
++                color: badge.tint
++            }
++        }
++
++        Kirigami.Heading {
++            Layout.fillWidth: true
++            horizontalAlignment: Text.AlignHCenter
++            wrapMode: Text.Wrap
++            level: 2
++            text: {
++                switch (root.updateState) {
++                case Updates.UpdatesUtil.Restarting:
++                    return i18n("Update Installed");
++                case Updates.UpdatesUtil.UpToDate:
++                    return i18n("Up to Date");
++                case Updates.UpdatesUtil.Failed:
++                    return i18n("Couldn't Update");
++                default:
++                    return i18nc("%1 is the distro name", "Updating %1", InitialStartUtil.distroName);
++                }
++            }
++        }
++
++        Label {
++            Layout.fillWidth: true
++            Layout.leftMargin: Kirigami.Units.gridUnit
++            Layout.rightMargin: Kirigami.Units.gridUnit
++            horizontalAlignment: Text.AlignHCenter
++            wrapMode: Text.Wrap
++            text: {
++                switch (root.updateState) {
++                case Updates.UpdatesUtil.Restarting:
++                    return i18n("Restarting to finish the update. Setup starts again afterwards.");
++                case Updates.UpdatesUtil.UpToDate:
++                    return i18nc("%1 is the distro name", "%1 is up to date.", InitialStartUtil.distroName);
++                case Updates.UpdatesUtil.Failed:
++                    return i18n("You can go on with the setup. Updates will be installed automatically later.");
++                default:
++                    return i18n("The latest updates are being downloaded and installed. Your computer restarts when they are done.");
++                }
++            }
++        }
++
++        ProgressBar {
++            Layout.fillWidth: true
++            Layout.maximumWidth: Kirigami.Units.gridUnit * 20
++            Layout.alignment: Qt.AlignHCenter
++            Layout.topMargin: Kirigami.Units.largeSpacing
++            visible: root.updateState === Updates.UpdatesUtil.Updating || root.updateState === Updates.UpdatesUtil.Idle
++            from: 0
++            to: 100
++            value: Math.max(0, Updates.UpdatesUtil.percent)
++            indeterminate: Updates.UpdatesUtil.percent < 0
++        }
++
++        BusyIndicator {
++            Layout.alignment: Qt.AlignHCenter
++            visible: root.updateState === Updates.UpdatesUtil.Restarting
++            running: visible
++        }
++
++        Label {
++            Layout.fillWidth: true
++            horizontalAlignment: Text.AlignHCenter
++            visible: text !== "" && root.updateState === Updates.UpdatesUtil.Updating
++            text: Updates.UpdatesUtil.downloadSize !== "" && Updates.UpdatesUtil.downloaded !== ""
++                ? i18nc("downloaded of total size", "%1 of %2", Updates.UpdatesUtil.downloaded, Updates.UpdatesUtil.downloadSize)
++                : ""
++        }
++
++        // What rpm-ostree is doing, or why it failed
++        Label {
++            Layout.fillWidth: true
++            Layout.leftMargin: Kirigami.Units.gridUnit
++            Layout.rightMargin: Kirigami.Units.gridUnit
++            horizontalAlignment: Text.AlignHCenter
++            visible: root.updateState === Updates.UpdatesUtil.Updating || root.updateState === Updates.UpdatesUtil.Failed
++            text: Updates.UpdatesUtil.message
++            elide: Text.ElideMiddle
++            maximumLineCount: root.updateState === Updates.UpdatesUtil.Failed ? 3 : 1
++            wrapMode: root.updateState === Updates.UpdatesUtil.Failed ? Text.Wrap : Text.NoWrap
++            font: Kirigami.Theme.smallFont
++            opacity: 0.7
++        }
++
++        Item {
++            Layout.fillHeight: true
++        }
++    }
++}
+diff --git a/modules/updates/metadata.json b/modules/updates/metadata.json
+new file mode 100644
+index 0000000..486c6c7
+--- /dev/null
++++ b/modules/updates/metadata.json
+@@ -0,0 +1,21 @@
++{
++    "KPackageStructure": "KDE/PlasmaSetup",
++    "KPlugin": {
++        "Authors": [
++            {
++                "Email": "me@koyu.space",
++                "Name": "Leonie Ain"
++            }
++        ],
++        "Description": "Download and install system updates, and restart if there were any.",
++        "Description[de]": "Systemaktualisierungen herunterladen und installieren, und bei Bedarf neu starten.",
++        "Id": "org.kde.plasmasetup.updates",
++        "License": "GPL-2.0-or-later",
++        "Name": "Updates",
++        "Name[de]": "Aktualisierungen",
++        "Website": "https://blossomos.org"
++    },
++    "NoDisplay": true,
++    "X-KDE-ParentApp": "org.kde.plasmasetup",
++    "X-KDE-Weight": 55
++}
+diff --git a/modules/updates/metadata.json.license b/modules/updates/metadata.json.license
+new file mode 100644
+index 0000000..4ed95c4
+--- /dev/null
++++ b/modules/updates/metadata.json.license
+@@ -0,0 +1,2 @@
++SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++SPDX-License-Identifier: GPL-2.0-or-later
+diff --git a/modules/updatesutil/CMakeLists.txt b/modules/updatesutil/CMakeLists.txt
+new file mode 100644
+index 0000000..a05b294
+--- /dev/null
++++ b/modules/updatesutil/CMakeLists.txt
+@@ -0,0 +1,22 @@
++# SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++#
++# SPDX-License-Identifier: GPL-2.0-or-later
++
++ecm_add_qml_module(plasmasetup_updatesutil
++    URI "org.kde.plasmasetup.updatesutil"
++    GENERATE_PLUGIN_SOURCE
++)
++
++target_sources(plasmasetup_updatesutil PRIVATE
++    updatesutil.cpp
++    updatesutil.h
++)
++
++target_link_libraries(plasmasetup_updatesutil PRIVATE
++    Qt::Core
++    Qt::DBus
++    Qt::Quick
++    KF6::I18n
++)
++
++ecm_finalize_qml_module(plasmasetup_updatesutil)
+diff --git a/modules/updatesutil/updatesutil.cpp b/modules/updatesutil/updatesutil.cpp
+new file mode 100644
+index 0000000..50ca046
+--- /dev/null
++++ b/modules/updatesutil/updatesutil.cpp
+@@ -0,0 +1,430 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: AGPL-3.0-or-later
++// The rpm-ostree transaction handling is ported from BlossomOS' Software Update KCM
++
++#include "updatesutil.h"
++
++#include <KLocalizedString>
++
++#include <QDBusArgument>
++#include <QDBusInterface>
++#include <QDBusMessage>
++#include <QDBusPendingCallWatcher>
++#include <QDBusVariant>
++#include <QFile>
++#include <QLocale>
++#include <QRegularExpression>
++#include <QTextStream>
++#include <QTimer>
++
++using namespace Qt::StringLiterals;
++
++namespace
++{
++constexpr auto RPMOSTREE_SERVICE = "org.projectatomic.rpmostree1";
++constexpr auto RPMOSTREE_SYSROOT_PATH = "/org/projectatomic/rpmostree1/Sysroot";
++constexpr auto RPMOSTREE_SYSROOT_IFACE = "org.projectatomic.rpmostree1.Sysroot";
++constexpr auto RPMOSTREE_OS_PATH = "/org/projectatomic/rpmostree1/default";
++constexpr auto RPMOSTREE_OS_IFACE = "org.projectatomic.rpmostree1.OS";
++constexpr auto TRANSACTION_CONNECTION = "plasma-setup-rpmostree-transaction";
++
++// How long "Restarting…" shows before the restart
++constexpr int RESTART_DELAY_MS = 3000;
++
++bool preview()
++{
++    return qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1;
++}
++
++// The last parenthesized size in a daemon message, like "(1.2 GB)"
++quint64 parseSizeSuffix(const QString &text)
++{
++    static const QRegularExpression re(u"\\(([0-9]+(?:[.,][0-9]+)?)[\\s\\x{00a0}]*(B|kB|KB|KiB|MB|MiB|GB|GiB|TB|TiB)\\)"_s);
++    QRegularExpressionMatch last;
++    auto it = re.globalMatch(text);
++    while (it.hasNext()) {
++        last = it.next();
++    }
++    if (!last.hasMatch()) {
++        return 0;
++    }
++    QString number = last.captured(1);
++    number.replace(u',', u'.');
++    static const QHash<QString, double> units{
++        {u"B"_s, 1},
++        {u"kB"_s, 1e3},
++        {u"KB"_s, 1e3},
++        {u"KiB"_s, 1024.0},
++        {u"MB"_s, 1e6},
++        {u"MiB"_s, 1024.0 * 1024},
++        {u"GB"_s, 1e9},
++        {u"GiB"_s, 1024.0 * 1024 * 1024},
++        {u"TB"_s, 1e12},
++        {u"TiB"_s, 1024.0 * 1024 * 1024 * 1024},
++    };
++    return static_cast<quint64>(number.toDouble() * units.value(last.captured(2), 1));
++}
++
++// Bytes received over all network interfaces but loopback
++quint64 totalRxBytes()
++{
++    QFile file(u"/proc/net/dev"_s);
++    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
++        return 0;
++    }
++    QTextStream in(&file);
++    in.readLine();
++    in.readLine();
++    quint64 total = 0;
++    while (!in.atEnd()) {
++        const QString line = in.readLine().trimmed();
++        const qsizetype colon = line.indexOf(u':');
++        if (colon <= 0 || line.left(colon).trimmed() == "lo"_L1) {
++            continue;
++        }
++        const QStringList fields = line.mid(colon + 1).split(u' ', Qt::SkipEmptyParts);
++        if (!fields.isEmpty()) {
++            total += fields.at(0).toULongLong();
++        }
++    }
++    return total;
++}
++
++// The setup user's polkit rule allows these without asking
++QDBusPendingCall systemCall(const char *service, const char *path, const char *interface, const QString &method, const QVariantList &arguments = {})
++{
++    QDBusMessage message = QDBusMessage::createMethodCall(QLatin1String(service), QLatin1String(path), QLatin1String(interface), method);
++    message.setArguments(arguments);
++    return QDBusConnection::systemBus().asyncCall(message);
++}
++}
++
++UpdatesUtil::UpdatesUtil(QObject *parent)
++    : QObject{parent}
++    , m_progressTimer{new QTimer(this)}
++{
++    // rpm-ostree reports no byte progress while pulling container layers. It
++    // announces the size of each layer though, so finished layers count
++    // exactly and the running one is estimated from the bytes received
++    m_progressTimer->setInterval(1000);
++    connect(m_progressTimer, &QTimer::timeout, this, &UpdatesUtil::updateDownloadProgress);
++}
++
++UpdatesUtil::~UpdatesUtil()
++{
++    cleanupTransaction();
++}
++
++bool UpdatesUtil::available() const
++{
++    return preview() || QFile::exists(u"/run/ostree-booted"_s);
++}
++
++UpdatesUtil::State UpdatesUtil::state() const
++{
++    return m_state;
++}
++
++int UpdatesUtil::percent() const
++{
++    return m_percent;
++}
++
++QString UpdatesUtil::downloaded() const
++{
++    return m_currentBytes > 0 ? QLocale().formattedDataSize(static_cast<qint64>(m_currentBytes)) : QString();
++}
++
++QString UpdatesUtil::downloadSize() const
++{
++    return m_totalBytes > 0 ? QLocale().formattedDataSize(static_cast<qint64>(m_totalBytes)) : QString();
++}
++
++QString UpdatesUtil::message() const
++{
++    return m_message;
++}
++
++void UpdatesUtil::start()
++{
++    if (m_state != Idle) {
++        return;
++    }
++    setState(Updating);
++
++    if (preview()) {
++        startPreview();
++        return;
++    }
++
++    auto *watcher =
++        new QDBusPendingCallWatcher(systemCall(RPMOSTREE_SERVICE, RPMOSTREE_OS_PATH, RPMOSTREE_OS_IFACE, u"Upgrade"_s, {QVariant::fromValue(QVariantMap{})}),
++                                    this);
++    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *watcher) {
++        watcher->deleteLater();
++        QDBusPendingReply<QString> reply = *watcher;
++        if (reply.isError()) {
++            fail(reply.error().message());
++            return;
++        }
++        beginTransaction(reply.value());
++    });
++}
++
++void UpdatesUtil::setState(State state)
++{
++    if (m_state == state) {
++        return;
++    }
++    m_state = state;
++    Q_EMIT stateChanged();
++}
++
++void UpdatesUtil::setMessage(const QString &message)
++{
++    if (m_message == message) {
++        return;
++    }
++    m_message = message;
++    Q_EMIT messageChanged();
++}
++
++void UpdatesUtil::fail(const QString &message)
++{
++    cleanupTransaction();
++    setMessage(message.isEmpty() ? i18n("Unknown error") : message);
++    setState(Failed);
++}
++
++void UpdatesUtil::beginTransaction(const QString &address)
++{
++    QDBusConnection connection = QDBusConnection::connectToPeer(address, QLatin1String(TRANSACTION_CONNECTION));
++    if (!connection.isConnected()) {
++        fail(i18n("Failed to connect to rpm-ostree transaction"));
++        return;
++    }
++    m_connectionName = QLatin1String(TRANSACTION_CONNECTION);
++
++    m_transaction = new RpmOstreeTransaction(connection, this);
++    connect(m_transaction, &RpmOstreeTransaction::Message, this, &UpdatesUtil::onMessage);
++    connect(m_transaction, &RpmOstreeTransaction::TaskBegin, this, &UpdatesUtil::onTaskBegin);
++    connect(m_transaction, &RpmOstreeTransaction::TaskEnd, this, &UpdatesUtil::onTaskEnd);
++    connect(m_transaction, &RpmOstreeTransaction::PercentProgress, this, &UpdatesUtil::onPercentProgress);
++    connect(m_transaction, &RpmOstreeTransaction::Finished, this, &UpdatesUtil::onFinished);
++    m_transaction->start();
++    m_progressTimer->start();
++}
++
++void UpdatesUtil::cleanupTransaction()
++{
++    m_progressTimer->stop();
++    delete m_transaction;
++    m_transaction = nullptr;
++    if (!m_connectionName.isEmpty()) {
++        QDBusConnection::disconnectFromPeer(m_connectionName);
++        m_connectionName.clear();
++    }
++}
++
++void UpdatesUtil::onMessage(const QString &message)
++{
++    setMessage(message);
++
++    // The daemon announces the remaining download when the pull starts
++    if (message.contains("needed:"_L1)) {
++        const quint64 bytes = parseSizeSuffix(message);
++        if (bytes > 0) {
++            m_totalBytes += bytes;
++            Q_EMIT progressChanged();
++        }
++    }
++}
++
++void UpdatesUtil::onTaskBegin(const QString &text)
++{
++    setMessage(text);
++
++    const quint64 bytes = parseSizeSuffix(text);
++    if (bytes > 0) {
++        m_taskBytes = bytes;
++        m_taskBaseline = totalRxBytes();
++        m_taskActive = true;
++    } else if (m_completedBytes > 0) {
++        // A task without a size after the layers means staging has begun
++        finishDownloadPhase();
++    }
++}
++
++void UpdatesUtil::onTaskEnd(const QString &text)
++{
++    Q_UNUSED(text)
++    if (m_taskActive) {
++        m_taskActive = false;
++        m_completedBytes += m_taskBytes;
++        updateDownloadProgress();
++    }
++    // The announced sizes are rounded, so within two percent counts as done
++    if (m_totalBytes > 0 && m_completedBytes + m_totalBytes / 50 >= m_totalBytes) {
++        finishDownloadPhase();
++    }
++}
++
++void UpdatesUtil::onPercentProgress(const QString &text, quint32 percent)
++{
++    if (!text.isEmpty()) {
++        setMessage(text);
++    }
++    // The download estimate beats the jumpy per phase percentages
++    if (m_progressTimer->isActive() && m_totalBytes > 0) {
++        return;
++    }
++    m_percent = static_cast<int>(percent);
++    Q_EMIT progressChanged();
++}
++
++void UpdatesUtil::updateDownloadProgress()
++{
++    if (m_totalBytes == 0) {
++        return;
++    }
++    quint64 current = m_completedBytes;
++    if (m_taskActive) {
++        const quint64 received = totalRxBytes();
++        current += qMin(received > m_taskBaseline ? received - m_taskBaseline : 0, m_taskBytes);
++    }
++    current = qMin(current, m_totalBytes);
++    const int percent = static_cast<int>(qMin<quint64>(99, current * 100 / m_totalBytes));
++    if (current != m_currentBytes || percent > m_percent) {
++        m_currentBytes = current;
++        m_percent = qMax(m_percent, percent);
++        Q_EMIT progressChanged();
++    }
++}
++
++// Writing the new image can't be measured, so the bar goes indeterminate
++void UpdatesUtil::finishDownloadPhase()
++{
++    if (!m_progressTimer->isActive()) {
++        return;
++    }
++    m_progressTimer->stop();
++    m_percent = -1;
++    m_currentBytes = 0;
++    m_totalBytes = 0;
++    Q_EMIT progressChanged();
++}
++
++void UpdatesUtil::onFinished(bool success, const QString &errorMessage)
++{
++    cleanupTransaction();
++    if (!success) {
++        fail(errorMessage);
++        return;
++    }
++    checkStagedDeployment();
++}
++
++// An update was installed when the next boot's deployment has another image
++// than the booted one
++void UpdatesUtil::checkStagedDeployment()
++{
++    QDBusMessage message =
++        QDBusMessage::createMethodCall(QLatin1String(RPMOSTREE_SERVICE), QLatin1String(RPMOSTREE_SYSROOT_PATH), u"org.freedesktop.DBus.Properties"_s, u"Get"_s);
++    message.setArguments({QLatin1String(RPMOSTREE_SYSROOT_IFACE), u"Deployments"_s});
++    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(message), this);
++    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *watcher) {
++        watcher->deleteLater();
++        QDBusPendingReply<QDBusVariant> reply = *watcher;
++        if (reply.isError()) {
++            fail(reply.error().message());
++            return;
++        }
++
++        QList<QVariantMap> deployments;
++        const QDBusArgument array = qvariant_cast<QDBusArgument>(reply.value().variant());
++        array.beginArray();
++        while (!array.atEnd()) {
++            QVariantMap deployment;
++            array >> deployment;
++            deployments << deployment;
++        }
++        array.endArray();
++
++        // The image digest, and the commit for non-container deployments
++        auto imageOf = [](const QVariantMap &deployment) {
++            QVariantMap meta;
++            const QVariant metaVariant = deployment.value(u"base-commit-meta"_s);
++            if (metaVariant.canConvert<QDBusArgument>()) {
++                qvariant_cast<QDBusArgument>(metaVariant) >> meta;
++            }
++            const QString digest = meta.value(u"ostree.manifest-digest"_s).toString();
++            return digest.isEmpty() ? deployment.value(u"checksum"_s).toString() : digest;
++        };
++
++        // Deployments are in boot order: one before the booted one, or a
++        // staged one, is what the next boot uses
++        QString booted;
++        QString next;
++        bool beforeBooted = true;
++        for (const QVariantMap &deployment : std::as_const(deployments)) {
++            if (deployment.value(u"booted"_s).toBool()) {
++                booted = imageOf(deployment);
++                beforeBooted = false;
++            } else if (next.isEmpty() && (beforeBooted || deployment.value(u"staged"_s).toBool())) {
++                next = imageOf(deployment);
++            }
++        }
++
++        if (!next.isEmpty() && next != booted) {
++            reboot();
++        } else {
++            setState(UpToDate);
++        }
++    });
++}
++
++void UpdatesUtil::reboot()
++{
++    setState(Restarting);
++    QTimer::singleShot(RESTART_DELAY_MS, this, [this] {
++        if (preview()) {
++            return;
++        }
++        auto *watcher =
++            new QDBusPendingCallWatcher(systemCall("org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager", u"Reboot"_s, {false}),
++                                        this);
++        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *watcher) {
++            watcher->deleteLater();
++            if (!watcher->isError()) {
++                return;
++            }
++            // A lost connection just means the restart is under way
++            const QDBusError::ErrorType type = watcher->error().type();
++            if (type != QDBusError::Disconnected && type != QDBusError::NoReply && type != QDBusError::TimedOut) {
++                fail(watcher->error().message());
++            }
++        });
++    });
++}
++
++// Pretends to download an update so the page can be looked at, and stops at
++// "Restarting…"
++void UpdatesUtil::startPreview()
++{
++    m_totalBytes = 1536ull * 1024 * 1024;
++    setMessage(u"Pulling manifest: ostree-image-signed:docker://registry.blossomos.org/blossomos/blossomos:latest"_s);
++    auto *timer = new QTimer(this);
++    timer->setInterval(100);
++    connect(timer, &QTimer::timeout, this, [this, timer] {
++        m_currentBytes = qMin(m_totalBytes, m_currentBytes + m_totalBytes / 60);
++        m_percent = static_cast<int>(m_currentBytes * 100 / m_totalBytes);
++        Q_EMIT progressChanged();
++        if (m_currentBytes == m_totalBytes) {
++            timer->deleteLater();
++            reboot();
++        }
++    });
++    timer->start();
++}
++
++#include "moc_updatesutil.cpp"
+diff --git a/modules/updatesutil/updatesutil.h b/modules/updatesutil/updatesutil.h
+new file mode 100644
+index 0000000..0935615
+--- /dev/null
++++ b/modules/updatesutil/updatesutil.h
+@@ -0,0 +1,125 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: AGPL-3.0-or-later
++// The rpm-ostree transaction handling is ported from BlossomOS' Software Update KCM
++
++#pragma once
++
++#include <QDBusAbstractInterface>
++#include <QDBusConnection>
++#include <QDBusPendingReply>
++#include <QObject>
++#include <qqmlintegration.h>
++
++class QTimer;
++
++// Proxy for the rpm-ostree transaction peer connection
++class RpmOstreeTransaction : public QDBusAbstractInterface
++{
++    Q_OBJECT
++public:
++    explicit RpmOstreeTransaction(const QDBusConnection &connection, QObject *parent = nullptr)
++        : QDBusAbstractInterface(QString(), QStringLiteral("/"), "org.projectatomic.rpmostree1.Transaction", connection, parent)
++    {
++    }
++
++    inline QDBusPendingReply<> start()
++    {
++        return asyncCall(QStringLiteral("Start"));
++    }
++
++Q_SIGNALS:
++    void Message(const QString &message);
++    void TaskBegin(const QString &text);
++    void TaskEnd(const QString &text);
++    void PercentProgress(const QString &text, quint32 percent);
++    void Finished(bool success, const QString &errorMessage);
++};
++
++/*!
++ * Downloads and stages the latest system image with rpm-ostree, and restarts
++ * into it when there was one.
++ */
++class UpdatesUtil : public QObject
++{
++    Q_OBJECT
++    QML_ELEMENT
++    QML_SINGLETON
++
++    Q_PROPERTY(bool available READ available CONSTANT)
++    Q_PROPERTY(State state READ state NOTIFY stateChanged)
++    /*!
++     * Download progress in percent, or -1 when it can't be told.
++     */
++    Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
++    Q_PROPERTY(QString downloaded READ downloaded NOTIFY progressChanged)
++    Q_PROPERTY(QString downloadSize READ downloadSize NOTIFY progressChanged)
++    /*!
++     * What rpm-ostree is doing, or why it failed.
++     */
++    Q_PROPERTY(QString message READ message NOTIFY messageChanged)
++
++public:
++    enum State {
++        Idle,
++        Updating,
++        Restarting,
++        UpToDate,
++        Failed,
++    };
++    Q_ENUM(State)
++
++    explicit UpdatesUtil(QObject *parent = nullptr);
++    ~UpdatesUtil() override;
++
++    /*!
++     * Only on image based (ostree) systems, and in previews.
++     */
++    bool available() const;
++    State state() const;
++    int percent() const;
++    QString downloaded() const;
++    QString downloadSize() const;
++    QString message() const;
++
++    /*!
++     * Starts the update, once.
++     */
++    Q_INVOKABLE void start();
++
++Q_SIGNALS:
++    void stateChanged();
++    void progressChanged();
++    void messageChanged();
++
++private:
++    void setState(State state);
++    void setMessage(const QString &message);
++    void fail(const QString &message);
++
++    void beginTransaction(const QString &address);
++    void cleanupTransaction();
++    void onMessage(const QString &message);
++    void onTaskBegin(const QString &text);
++    void onTaskEnd(const QString &text);
++    void onPercentProgress(const QString &text, quint32 percent);
++    void onFinished(bool success, const QString &errorMessage);
++    void updateDownloadProgress();
++    void finishDownloadPhase();
++    void checkStagedDeployment();
++    void reboot();
++    void startPreview();
++
++    State m_state = Idle;
++    int m_percent = -1;
++    quint64 m_totalBytes = 0;
++    quint64 m_completedBytes = 0;
++    quint64 m_currentBytes = 0;
++    quint64 m_taskBytes = 0;
++    quint64 m_taskBaseline = 0;
++    bool m_taskActive = false;
++    QString m_message;
++
++    QTimer *m_progressTimer = nullptr;
++    RpmOstreeTransaction *m_transaction = nullptr;
++    QString m_connectionName;
++};
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index 4a75f63..efd9e4d 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -400,6 +400,64 @@ msgstr ""
+ "Wähle ein Hintergrundbild für deine Arbeitsfläche. Du kannst es später in "
+ "den Systemeinstellungen ändern."
+ 
++#: modules/updates/contents/ui/main.qml:76
++#, kde-format
++msgid "Update Installed"
++msgstr "Aktualisierung installiert"
++
++#: modules/updates/contents/ui/main.qml:78
++#, kde-format
++msgid "Up to Date"
++msgstr "Auf dem neuesten Stand"
++
++#: modules/updates/contents/ui/main.qml:80
++#, kde-format
++msgid "Couldn't Update"
++msgstr "Aktualisierung fehlgeschlagen"
++
++#: modules/updates/contents/ui/main.qml:82
++#, kde-format
++msgctxt "%1 is the distro name"
++msgid "Updating %1"
++msgstr "%1 wird aktualisiert"
++
++#: modules/updates/contents/ui/main.qml:96
++#, kde-format
++msgid "Restarting to finish the update. Setup starts again afterwards."
++msgstr "Dein Computer wird neu gestartet, um die Aktualisierung abzuschließen. Danach startet die Einrichtung erneut."
++
++#: modules/updates/contents/ui/main.qml:98
++#, kde-format
++msgctxt "%1 is the distro name"
++msgid "%1 is up to date."
++msgstr "%1 ist auf dem neuesten Stand."
++
++#: modules/updates/contents/ui/main.qml:100
++#, kde-format
++msgid "You can go on with the setup. Updates will be installed automatically later."
++msgstr "Du kannst mit der Einrichtung weitermachen. Aktualisierungen werden später automatisch installiert."
++
++#: modules/updates/contents/ui/main.qml:102
++#, kde-format
++msgid "The latest updates are being downloaded and installed. Your computer restarts when they are done."
++msgstr "Die neuesten Aktualisierungen werden heruntergeladen und installiert. Danach startet dein Computer neu."
++
++#: modules/updates/contents/ui/main.qml:130
++#, kde-format
++msgctxt "downloaded of total size"
++msgid "%1 of %2"
++msgstr "%1 von %2"
++
++#: modules/updatesutil/updatesutil.cpp:195
++#, kde-format
++msgid "Unknown error"
++msgstr "Unbekannter Fehler"
++
++#: modules/updatesutil/updatesutil.cpp:203
++#, kde-format
++msgid "Failed to connect to rpm-ostree transaction"
++msgstr "Verbindung zur rpm-ostree-Transaktion fehlgeschlagen"
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Passen Sie die Größe der Elemente auf dem Bildschirm an."
+ 
+diff --git a/src/initialstartutil.cpp b/src/initialstartutil.cpp
+index 22a2f3d..a9d337d 100644
+--- a/src/initialstartutil.cpp
++++ b/src/initialstartutil.cpp
+@@ -12,6 +12,8 @@
+ #include <KLocalizedString>
+ 
+ #include <QApplication>
++#include <QDBusConnection>
++#include <QDBusInterface>
+ 
+ InitialStartUtil::InitialStartUtil(QObject *parent)
+     : QObject{parent}
+@@ -37,6 +39,18 @@ QString InitialStartUtil::previewPage() const
+     return preview() ? qEnvironmentVariable("PLASMA_SETUP_PREVIEW_PAGE") : QString();
+ }
+ 
++bool InitialStartUtil::online() const
++{
++    // NM_STATE_CONNECTED_GLOBAL, which also takes NetworkManager's
++    // connectivity check into account when it is enabled
++    constexpr uint connectedGlobal = 70;
++    QDBusInterface networkManager(QStringLiteral("org.freedesktop.NetworkManager"),
++                                  QStringLiteral("/org/freedesktop/NetworkManager"),
++                                  QStringLiteral("org.freedesktop.NetworkManager"),
++                                  QDBusConnection::systemBus());
++    return networkManager.property("State").toUInt() == connectedGlobal;
++}
++
+ void InitialStartUtil::finish()
+ {
+     if (preview()) {
+diff --git a/src/initialstartutil.h b/src/initialstartutil.h
+index 009dffa..4070f2c 100644
+--- a/src/initialstartutil.h
++++ b/src/initialstartutil.h
+@@ -40,6 +40,12 @@ public:
+      */
+     QString previewPage() const;
+ 
++    /**
++     * Whether NetworkManager has a connection to the internet. Pages that
++     * need one skip themselves without it.
++     */
++    Q_INVOKABLE bool online() const;
++
+     /**
+      * Completes the initial setup process.
+      */
+diff --git a/src/pagesmodel.cpp b/src/pagesmodel.cpp
+index d282941..7bf581a 100644
+--- a/src/pagesmodel.cpp
++++ b/src/pagesmodel.cpp
+@@ -65,6 +65,11 @@ QString PagesModel::pluginId(int row)
+     return data(index(row, 0), PluginIdRole).toString();
+ }
+ 
++void PagesModel::removePage(int row)
++{
++    removeRow(row);
++}
++
+ QHash<int, QByteArray> PagesModel::roleNames() const
+ {
+     QHash<int, QByteArray> roles = QAbstractItemModel::roleNames();
+diff --git a/src/pagesmodel.h b/src/pagesmodel.h
+index fcda49b..e024298 100644
+--- a/src/pagesmodel.h
++++ b/src/pagesmodel.h
+@@ -29,6 +29,11 @@ public:
+ 
+     Q_INVOKABLE SetupModule *pageItem(int row);
+ 
++    /*!
++     * Takes a page out of the wizard, for pages that skip themselves.
++     */
++    Q_INVOKABLE void removePage(int row);
++
+ Q_SIGNALS:
+     void loaded();
+ 
+diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
+index f639eae..8d9261c 100644
+--- a/src/qml/Wizard.qml
++++ b/src/qml/Wizard.qml
+@@ -82,6 +82,14 @@ Kirigami.Page {
+             return;
+         }
+ 
++        // A page can drop out right before its turn by implementing
++        // `skipPage()`, like the browser page when there is no internet
++        let upcomingItem = stepsRepeater.itemAt(currentIndex + 1);
++        while (upcomingItem && upcomingItem.module && typeof upcomingItem.module.skipPage === "function" && upcomingItem.module.skipPage()) {
++            pagesModel.removePage(currentIndex + 1);
++            upcomingItem = stepsRepeater.itemAt(currentIndex + 1);
++        }
++
+         previousStepItemX = 0;
+ 
+         // Notify the next page/module it is being activated.

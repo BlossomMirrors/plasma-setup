@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 01:14:45 +0200
+Subject: [PATCH 02/10] authhelper: Merge the chosen theme into the new user's
+ kdeglobals
+
+Copying the setup user's kdeglobals over the new user's threw away
+everything /etc/skel put there, like the sound theme. Merge it instead,
+and give the new user the Bibata cursor at 20px.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/auth/authhelper.cpp | 52 +++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 48 insertions(+), 4 deletions(-)
+
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index 652a800..4fa868b 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -8,6 +8,7 @@
+ #include "config-plasma-setup.h"
+ 
+ #include <KAuth/HelperSupport>
++#include <KConfig>
+ #include <KConfigGroup>
+ #include <KSharedConfig>
+ 
+@@ -459,12 +460,55 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+             return makeErrorReply(QStringLiteral("Unable to create .config directory: ") + configDirPath);
+         }
+ 
+-        // Set the global theme for the new user
++        // Set the global theme for the new user. Merged into the kdeglobals
++        // the new home got from /etc/skel instead of replacing it, so the
++        // BlossomOS defaults in there (sound theme, icons, ...) survive
+         QString destFilePath = QDir::cleanPath(configDirPath + QStringLiteral("/kdeglobals"));
+ 
+-        if (!tempFile->copy(destFilePath)) {
+-            return makeErrorReply(QStringLiteral("Unable to copy file to destination: ") + tempFile->fileName() + QStringLiteral(" to ") + destFilePath
+-                                  + QStringLiteral(" -- Error message: ") + tempFile->errorString());
++        KConfig source(tempFile->fileName(), KConfig::SimpleConfig);
++        KConfig dest(destFilePath, KConfig::SimpleConfig);
++        const QStringList groups = source.groupList();
++        for (const QString &groupName : groups) {
++            KConfigGroup destGroup = dest.group(groupName);
++            const QMap<QString, QString> entries = source.group(groupName).entryMap();
++            for (auto it = entries.cbegin(); it != entries.cend(); ++it) {
++                destGroup.writeEntry(it.key(), it.value());
++            }
++        }
++        // Applying a look and feel can leave the scheme's name out of the
++        // setup user's kdeglobals, so name it after the chosen one
++        const bool dark = source.group(QStringLiteral("KDE")).readEntry("LookAndFeelPackage") == QLatin1String("org.blossomos.ui.dark.desktop");
++        dest.group(QStringLiteral("General")).writeEntry("ColorScheme", dark ? QStringLiteral("BlossomUIDark") : QStringLiteral("BlossomUILight"));
++        dest.group(QStringLiteral("Sounds")).writeEntry("Theme", QStringLiteral("blossom-sound-theme"));
++
++        KConfig input(QDir::cleanPath(configDirPath + QStringLiteral("/kcminputrc")), KConfig::SimpleConfig);
++        KConfigGroup mouse = input.group(QStringLiteral("Mouse"));
++        mouse.writeEntry("cursorTheme", QStringLiteral("Bibata-Modern-Classic"));
++        mouse.writeEntry("cursorSize", 20);
++
++        if (!dest.sync() || !input.sync()) {
++            return makeErrorReply(QStringLiteral("Unable to write the theme configuration to ") + configDirPath);
++        }
++
++        // The look and feel writes the GTK theme straight into the setup
++        // user's settings.ini, which the new user doesn't get; kde-gtk-config
++        // takes it from here at login
++        for (const QString &gtkDir : {QStringLiteral("gtk-3.0"), QStringLiteral("gtk-4.0")}) {
++            const QString gtkDirPath = QDir::cleanPath(configDirPath + QStringLiteral("/") + gtkDir);
++            if (!QDir(gtkDirPath).mkpath(QStringLiteral("."))) {
++                return makeErrorReply(QStringLiteral("Unable to create directory: ") + gtkDirPath);
++            }
++            KConfig gtk(gtkDirPath + QStringLiteral("/settings.ini"), KConfig::SimpleConfig);
++            KConfigGroup settings = gtk.group(QStringLiteral("Settings"));
++            settings.writeEntry("gtk-theme-name", QStringLiteral("BlossomUI"));
++            settings.writeEntry("gtk-icon-theme-name", QStringLiteral("BlossomUI"));
++            settings.writeEntry("gtk-cursor-theme-name", QStringLiteral("Bibata-Modern-Classic"));
++            settings.writeEntry("gtk-cursor-theme-size", 20);
++            settings.writeEntry("gtk-sound-theme-name", QStringLiteral("blossom-sound-theme"));
++            settings.writeEntry("gtk-application-prefer-dark-theme", dark);
++            if (!gtk.sync()) {
++                return makeErrorReply(QStringLiteral("Unable to write ") + gtkDirPath + QStringLiteral("/settings.ini"));
++            }
+         }
+ 
+         return ActionReply::SuccessReply();

@@ -1,0 +1,323 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 01:18:33 +0200
+Subject: [PATCH 06/10] Add a preview mode that changes nothing on the system
+
+With PLASMA_SETUP_PREVIEW=1 (just preview) the wizard runs as usual but
+doesn't create the user, mark setup as done, log out, restart, shut down,
+or set the hostname, time zone, language, keyboard layout or Wi-Fi
+connection; Finish quits. Pages installed in more than one data dir (the
+preview's stage and /usr/share) are only listed once.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ modules/hostnameutil/hostnameutil.cpp      |  5 +++++
+ modules/languageutil/languageutil.cpp      |  5 +++++
+ modules/timeutil/timeutil.cpp              |  5 +++++
+ modules/wifi/contents/ui/ConnectDialog.qml |  7 ++++++-
+ modules/wifi/contents/ui/main.qml          |  5 ++++-
+ src/initialstartutil.cpp                   | 20 ++++++++++++++++++++
+ src/initialstartutil.h                     | 14 ++++++++++++++
+ src/keyboardutil.cpp                       |  5 +++++
+ src/pagesmodel.cpp                         | 14 ++++++++++++++
+ src/qml/LandingComponent.qml               | 12 +++++++-----
+ src/qml/SessionMenu.qml                    |  5 +++++
+ src/qml/Wizard.qml                         | 17 +++++++++++++++++
+ 12 files changed, 107 insertions(+), 7 deletions(-)
+
+diff --git a/modules/hostnameutil/hostnameutil.cpp b/modules/hostnameutil/hostnameutil.cpp
+index c912e8b..69f14fd 100644
+--- a/modules/hostnameutil/hostnameutil.cpp
++++ b/modules/hostnameutil/hostnameutil.cpp
+@@ -211,6 +211,11 @@ QString HostnameUtil::readHostnameViaDBus(const QString &propertyName)
+ 
+ void HostnameUtil::setHostnameOnSystem(const QString &hostname)
+ {
++    if (qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1) {
++        qCInfo(PlasmaSetupHostnameUtil) << "Preview: not setting the hostname to" << hostname;
++        return;
++    }
++
+     setStaticHostname(hostname);
+     setTransientHostname(hostname);
+ }
+diff --git a/modules/languageutil/languageutil.cpp b/modules/languageutil/languageutil.cpp
+index 9d3f01e..f7d9f31 100644
+--- a/modules/languageutil/languageutil.cpp
++++ b/modules/languageutil/languageutil.cpp
+@@ -64,6 +64,11 @@ void LanguageUtil::applyLanguageForCurrentSession()
+ 
+ void LanguageUtil::applyLanguageAsSystemDefault()
+ {
++    if (qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1) {
++        qInfo() << "Preview: not setting the system language";
++        return;
++    }
++
+     const QString locale1Service = QStringLiteral("org.freedesktop.locale1");
+     const QString locale1Path = QStringLiteral("/org/freedesktop/locale1");
+ 
+diff --git a/modules/timeutil/timeutil.cpp b/modules/timeutil/timeutil.cpp
+index 4b6dec5..202ccd8 100644
+--- a/modules/timeutil/timeutil.cpp
++++ b/modules/timeutil/timeutil.cpp
+@@ -25,6 +25,11 @@ QString TimeUtil::currentTimeZone() const
+ 
+ void TimeUtil::setCurrentTimeZone(const QString &timeZone)
+ {
++    if (qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1) {
++        qInfo() << "Preview: not setting the system time zone to" << timeZone;
++        return;
++    }
++
+     auto reply = m_dbusInterface->SetTimezone(timeZone, false);
+     auto watcher = new QDBusPendingCallWatcher(reply, nullptr);
+     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, reply]() {
+diff --git a/modules/wifi/contents/ui/ConnectDialog.qml b/modules/wifi/contents/ui/ConnectDialog.qml
+index ac7992b..f89d26b 100644
+--- a/modules/wifi/contents/ui/ConnectDialog.qml
++++ b/modules/wifi/contents/ui/ConnectDialog.qml
+@@ -7,6 +7,7 @@ import QtQuick.Controls as Controls
+ import org.kde.kirigami as Kirigami
+ import org.kde.kirigamiaddons.components as Components
+ import org.kde.plasma.networkmanagement as PlasmaNM
++import org.kde.plasmasetup
+ 
+ Components.MessageDialog {
+     id: root
+@@ -41,7 +42,11 @@ Components.MessageDialog {
+     onAccepted: {
+         if (passwordField.acceptableInput) {
+             root.close();
+-            root.handler.addAndActivateConnection(devicePath, specificPath, passwordField.text);
++            if (InitialStartUtil.preview) {
++                console.info("Preview: not connecting to", root.headingText);
++            } else {
++                root.handler.addAndActivateConnection(devicePath, specificPath, passwordField.text);
++            }
+         }
+         passwordField.focus = false;
+     }
+diff --git a/modules/wifi/contents/ui/main.qml b/modules/wifi/contents/ui/main.qml
+index 6cb5d7c..1dfb105 100644
+--- a/modules/wifi/contents/ui/main.qml
++++ b/modules/wifi/contents/ui/main.qml
+@@ -12,6 +12,7 @@ import org.kde.kirigami as Kirigami
+ import org.kde.plasma.networkmanagement as PlasmaNM
+ 
+ import org.kde.plasmasetup.components as PlasmaSetupComponents
++import org.kde.plasmasetup
+ 
+ PlasmaSetupComponents.SetupModule {
+     id: root
+@@ -155,7 +156,9 @@ PlasmaSetupComponents.SetupModule {
+                         function changeState() {
+                             if (Uuid || !predictableWirelessPassword) {
+                                 if (ConnectionState == PlasmaNM.Enums.Deactivated) {
+-                                    if (!predictableWirelessPassword && !Uuid) {
++                                    if (InitialStartUtil.preview) {
++                                        console.info("Preview: not connecting to", ItemUniqueName);
++                                    } else if (!predictableWirelessPassword && !Uuid) {
+                                         handler.addAndActivateConnection(DevicePath, SpecificPath);
+                                     } else {
+                                         handler.activateConnection(ConnectionPath, DevicePath, SpecificPath);
+diff --git a/src/initialstartutil.cpp b/src/initialstartutil.cpp
+index 0669cae..22a2f3d 100644
+--- a/src/initialstartutil.cpp
++++ b/src/initialstartutil.cpp
+@@ -27,8 +27,24 @@ QString InitialStartUtil::distroName() const
+     return m_osrelease.name();
+ }
+ 
++bool InitialStartUtil::preview()
++{
++    return qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1;
++}
++
++QString InitialStartUtil::previewPage() const
++{
++    return preview() ? qEnvironmentVariable("PLASMA_SETUP_PREVIEW_PAGE") : QString();
++}
++
+ void InitialStartUtil::finish()
+ {
++    if (preview()) {
++        qCInfo(PlasmaSetup) << "Preview: not creating" << m_accountController->username() << ", not marking setup done, quitting.";
++        QCoreApplication::quit();
++        return;
++    }
++
+     doUserCreationSteps();
+     createCompletionFlag();
+     logOut();
+@@ -63,6 +79,10 @@ void InitialStartUtil::doUserCreationSteps()
+ 
+ void InitialStartUtil::disablePlasmaSetupAutologin()
+ {
++    if (preview()) {
++        return;
++    }
++
+     if (!runningAsPlasmaSetupUser()) {
+         qCInfo(PlasmaSetup) << "Not running as plasma-setup user; skipping autologin removal.";
+         return;
+diff --git a/src/initialstartutil.h b/src/initialstartutil.h
+index 0fc6585..009dffa 100644
+--- a/src/initialstartutil.h
++++ b/src/initialstartutil.h
+@@ -20,12 +20,26 @@ class InitialStartUtil : public QObject
+     QML_ELEMENT
+     QML_SINGLETON
+     Q_PROPERTY(QString distroName READ distroName CONSTANT);
++    Q_PROPERTY(bool preview READ preview CONSTANT);
++    Q_PROPERTY(QString previewPage READ previewPage CONSTANT);
+ 
+ public:
+     InitialStartUtil(QObject *parent = nullptr);
+ 
+     QString distroName() const;
+ 
++    /**
++     * Whether this is a preview (PLASMA_SETUP_PREVIEW=1, see `just preview`):
++     * the wizard runs as usual but changes nothing on the system.
++     */
++    static bool preview();
++
++    /**
++     * In a preview, the page to go to right away (PLASMA_SETUP_PREVIEW_PAGE,
++     * the end of its plugin id, like "wallpaper"), for screenshots.
++     */
++    QString previewPage() const;
++
+     /**
+      * Completes the initial setup process.
+      */
+diff --git a/src/keyboardutil.cpp b/src/keyboardutil.cpp
+index 1989f39..010dbf4 100644
+--- a/src/keyboardutil.cpp
++++ b/src/keyboardutil.cpp
+@@ -101,6 +101,11 @@ void KeyboardUtil::applyLayoutForCurrentUser()
+ 
+ void KeyboardUtil::applyLayoutAsSystemDefault()
+ {
++    if (InitialStartUtil::preview()) {
++        qCInfo(PlasmaSetup) << "Preview: not setting the system keyboard layout to" << m_layoutName;
++        return;
++    }
++
+     const QString locale1Service = QStringLiteral("org.freedesktop.locale1");
+     const QString locale1Path = QStringLiteral("/org/freedesktop/locale1");
+ 
+diff --git a/src/pagesmodel.cpp b/src/pagesmodel.cpp
+index 59e8ed3..d282941 100644
+--- a/src/pagesmodel.cpp
++++ b/src/pagesmodel.cpp
+@@ -8,6 +8,8 @@
+ #include <KPackage/PackageLoader>
+ #include <KPluginMetaData>
+ 
++#include <QSet>
++
+ using namespace Qt::StringLiterals;
+ 
+ PagesModel::PagesModel(QObject *parent)
+@@ -22,6 +24,18 @@ void PagesModel::reload()
+ 
+     auto packages = KPackage::PackageLoader::self()->listKPackages(QStringLiteral("KDE/PlasmaSetup"));
+ 
++    // A page installed in more than one data dir (the preview's stage and
++    // /usr/share) is listed once per dir; the first one in XDG_DATA_DIRS wins
++    QSet<QString> seen;
++    packages.removeIf([&seen](const KPackage::Package &package) {
++        const QString id = package.metadata().pluginId();
++        if (seen.contains(id)) {
++            return true;
++        }
++        seen.insert(id);
++        return false;
++    });
++
+     std::ranges::sort(packages, [](const KPackage::Package &left, const KPackage::Package &right) {
+         const auto leftData = left.metadata().rawData();
+         const auto rightData = right.metadata().rawData();
+diff --git a/src/qml/LandingComponent.qml b/src/qml/LandingComponent.qml
+index 5422212..908233e 100644
+--- a/src/qml/LandingComponent.qml
++++ b/src/qml/LandingComponent.qml
+@@ -15,6 +15,12 @@ Item {
+ 
+     signal requestNextPage()
+ 
++    function begin() {
++        contentOpacityAnim.to = 0;
++        contentOpacityAnim.restart();
++        root.requestNextPage();
++    }
++
+     function returnToLanding() {
+         contentOpacityAnim.to = 1;
+         contentOpacityAnim.restart();
+@@ -92,11 +98,7 @@ Item {
+                 text: i18n("Begin Setup")
+                 icon.name: "go-next-symbolic"
+ 
+-                onClicked: {
+-                    contentOpacityAnim.to = 0;
+-                    contentOpacityAnim.restart();
+-                    root.requestNextPage()
+-                }
++                onClicked: root.begin()
+             }
+         }
+ 
+diff --git a/src/qml/SessionMenu.qml b/src/qml/SessionMenu.qml
+index 5369a03..6a200c5 100644
+--- a/src/qml/SessionMenu.qml
++++ b/src/qml/SessionMenu.qml
+@@ -11,6 +11,7 @@ import QtQuick.Controls
+ import org.kde.plasma.private.kicker as Kicker
+ import org.kde.kirigami as Kirigami
+ import org.kde.kitemmodels as KItemModels
++import org.kde.plasmasetup
+ 
+ /*!
+     Provides system session actions such as restart and shutdown.
+@@ -52,6 +53,10 @@ Flow {
+             @param proxyRow The row index in the proxy model to trigger, e.g. reboot or shutdown.
+         */
+         function trigger(proxyRow: int): void {
++            if (InitialStartUtil.preview) {
++                console.info("Preview: not restarting or shutting down");
++                return;
++            }
+             const sourceIndex = mapToSource(index(proxyRow, 0));
+             systemModel.trigger(sourceIndex.row, "", null);
+         }
+diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
+index b1a9032..f639eae 100644
+--- a/src/qml/Wizard.qml
++++ b/src/qml/Wizard.qml
+@@ -156,6 +156,23 @@ Kirigami.Page {
+         onLoaded: root.currentIndex = 0
+     }
+ 
++    // Preview only: walk to the page named in PLASMA_SETUP_PREVIEW_PAGE
++    // (scripts/preview --page), one step at a time as the buttons would
++    Timer {
++        running: InitialStartUtil.previewPage !== "" && root.stepCount > 0
++        interval: 500
++        repeat: true
++        onTriggered: {
++            if (root.showingLanding) {
++                landingComponent.begin();
++            } else if (pagesModel.pluginId(root.currentIndex) !== "org.kde.plasmasetup." + InitialStartUtil.previewPage && !root.onFinalPage) {
++                root.requestNextPage();
++            } else {
++                stop();
++            }
++        }
++    }
++
+     Connections {
+         target: pagesModel
+ 

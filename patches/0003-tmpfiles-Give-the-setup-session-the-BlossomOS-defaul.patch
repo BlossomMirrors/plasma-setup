@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 01:15:05 +0200
+Subject: [PATCH 03/10] tmpfiles: Give the setup session the BlossomOS
+ defaults, hide blossom-welcome
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ files/plasma-setup-tmpfiles.conf.in | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/files/plasma-setup-tmpfiles.conf.in b/files/plasma-setup-tmpfiles.conf.in
+index 8ea1989..29d1a2e 100644
+--- a/files/plasma-setup-tmpfiles.conf.in
++++ b/files/plasma-setup-tmpfiles.conf.in
+@@ -21,6 +21,18 @@ C /run/plasma-setup/.config/autostart/plasma-setup.desktop - - - - ${CMAKE_INSTA
+ # run or not. A bit hacky, might break if plasma-welcome changes.
+ f /run/plasma-setup/.config/plasma-welcomerc - - - - [General]\nLastSeenVersion=6.4.2\nShowUpdatePage=false
+ 
++# Prevent blossom-welcome from running, by hiding its XDG autostart entry for
++# this user only
++f /run/plasma-setup/.config/autostart/org.blossomos.Welcome.desktop - - - - [Desktop Entry]\nHidden=true
++
++# The BlossomOS look for the setup session: BlossomUI, the Bibata cursor at
++# 20px, the BlossomOS sound theme and no splash. The skel's applets layout is
++# left out on purpose, see below.
++C /run/plasma-setup/.config/kdeglobals - - - - /etc/skel/.config/kdeglobals
++C /run/plasma-setup/.config/kcminputrc - - - - /etc/skel/.config/kcminputrc
++C /run/plasma-setup/.config/plasmarc - - - - /etc/skel/.config/plasmarc
++C /run/plasma-setup/.config/ksplashrc - - - - /etc/skel/.config/ksplashrc
++
+ # Disable screen locking, leaving only screen dimming / blanking enabled.
+ #
+ # The plasma-setup special user does not have a password (nor would it be appropriate

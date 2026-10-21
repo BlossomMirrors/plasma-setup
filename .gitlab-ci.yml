@@ -1,0 +1,68 @@
+stages:
+  - build
+  - release
+
+variables:
+  PACKAGE_NAME: plasma-setup
+  FEDORA_VERSION: "44"
+
+rpm:
+  stage: build
+  image: registry.fedoraproject.org/fedora:44
+  rules:
+    - if: $CI_COMMIT_TAG
+  cache:
+    key: srpm-$FEDORA_VERSION
+    paths:
+      - cache
+  before_script:
+    - dnf install -y --setopt=install_weak_deps=False koji rpm-build dnf-plugins-core python3 findutils
+  script:
+    - ./build.sh "$FEDORA_VERSION"
+    - |
+      set -eu
+      # build.sh always builds the latest Koji SRPM, so make sure the tag
+      # still describes what was built (e.g. v6.7.5-1.fc44.blossomos1)
+      BUILT=$(rpm -qp --qf '%{VERSION}-%{RELEASE}' build/rpmbuild/SRPMS/*.src.rpm)
+      if [ "$BUILT" != "${CI_COMMIT_TAG#v}" ]; then
+        echo "Tag $CI_COMMIT_TAG does not match built $BUILT, retag as v$BUILT" >&2
+        exit 1
+      fi
+    - mkdir -p dist
+    - find build/rpmbuild/RPMS -name '*.rpm' ! -name '*-debuginfo-*' ! -name '*-debugsource-*' -exec cp {} dist/ \;
+  artifacts:
+    paths:
+      - dist/*.rpm
+    expire_in: 1 week
+
+release:
+  stage: release
+  image: registry.fedoraproject.org/fedora:44
+  needs:
+    - rpm
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - |
+      set -eu
+      VERSION=${CI_COMMIT_TAG#v}
+      RELEASE_URL="$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases"
+      STATUS=$(curl -s -o /dev/null -w '%{http_code}' --header "JOB-TOKEN: $CI_JOB_TOKEN" "$RELEASE_URL/$CI_COMMIT_TAG")
+      if [ "$STATUS" = "404" ]; then
+        curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+          --data-urlencode "tag_name=$CI_COMMIT_TAG" \
+          --data-urlencode "name=$CI_COMMIT_TAG" \
+          --data-urlencode "description=$PACKAGE_NAME $VERSION" \
+          "$RELEASE_URL"
+      fi
+      for RPM in dist/*.rpm; do
+        FILE=$(basename "$RPM")
+        PKG_URL="$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/$PACKAGE_NAME/$VERSION/$FILE"
+        curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$RPM" "$PKG_URL"
+        curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+          --data-urlencode "name=$FILE" \
+          --data-urlencode "url=$PKG_URL" \
+          --data-urlencode "direct_asset_path=/$FILE" \
+          --data-urlencode "link_type=package" \
+          "$RELEASE_URL/$CI_COMMIT_TAG/assets/links"
+      done

@@ -1,0 +1,568 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 04:55:31 +0200
+Subject: [PATCH 08/10] Add a wallpaper page
+
+Lets the user pick the desktop wallpaper from the ones listed in
+plasma-setup/wallpapers.json, with its default preselected. Thumbnails
+follow the light/dark choice. The pick is kept in the setup user's
+plasma-setuprc and written into the desktop containment of the new
+user's layout along with the theme.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ modules/CMakeLists.txt                  |   4 +
+ modules/wallpaper/CMakeLists.txt        |  12 ++
+ modules/wallpaper/contents/ui/main.qml  | 144 ++++++++++++++++++++++++
+ modules/wallpaper/metadata.json         |  21 ++++
+ modules/wallpaper/metadata.json.license |   2 +
+ modules/wallpaperutil/CMakeLists.txt    |  22 ++++
+ modules/wallpaperutil/wallpaperutil.cpp | 134 ++++++++++++++++++++++
+ modules/wallpaperutil/wallpaperutil.h   |  51 +++++++++
+ po/de/org.kde.plasmasetup.po            |   9 ++
+ src/auth/authhelper.cpp                 |  41 +++++++
+ 10 files changed, 440 insertions(+)
+ create mode 100644 modules/wallpaper/CMakeLists.txt
+ create mode 100644 modules/wallpaper/contents/ui/main.qml
+ create mode 100644 modules/wallpaper/metadata.json
+ create mode 100644 modules/wallpaper/metadata.json.license
+ create mode 100644 modules/wallpaperutil/CMakeLists.txt
+ create mode 100644 modules/wallpaperutil/wallpaperutil.cpp
+ create mode 100644 modules/wallpaperutil/wallpaperutil.h
+
+diff --git a/modules/CMakeLists.txt b/modules/CMakeLists.txt
+index 40c0ee8..97b0b03 100644
+--- a/modules/CMakeLists.txt
++++ b/modules/CMakeLists.txt
+@@ -26,6 +26,9 @@ kpackage_install_package(prepare org.kde.plasmasetup.prepare packages plasma)
+ add_subdirectory(time)
+ kpackage_install_package(time org.kde.plasmasetup.time packages plasma)
+ 
++add_subdirectory(wallpaper)
++kpackage_install_package(wallpaper org.kde.plasmasetup.wallpaper packages plasma)
++
+ add_subdirectory(wifi)
+ kpackage_install_package(wifi org.kde.plasmasetup.wifi packages plasma)
+ 
+@@ -38,3 +41,4 @@ add_subdirectory(hostnameutil)
+ add_subdirectory(languageutil)
+ add_subdirectory(prepareutil)
+ add_subdirectory(timeutil)
++add_subdirectory(wallpaperutil)
+diff --git a/modules/wallpaper/CMakeLists.txt b/modules/wallpaper/CMakeLists.txt
+new file mode 100644
+index 0000000..3d77756
+--- /dev/null
++++ b/modules/wallpaper/CMakeLists.txt
+@@ -0,0 +1,12 @@
++# SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++#
++# SPDX-License-Identifier: GPL-2.0-or-later
++
++ecm_add_qml_module(plasmasetup_wallpaper
++    URI "org.kde.plasmasetup.wallpaper"
++    GENERATE_PLUGIN_SOURCE
++    DEPENDENCIES
++        Qt::Core
++)
++
++ecm_finalize_qml_module(plasmasetup_wallpaper)
+diff --git a/modules/wallpaper/contents/ui/main.qml b/modules/wallpaper/contents/ui/main.qml
+new file mode 100644
+index 0000000..fc04cfc
+--- /dev/null
++++ b/modules/wallpaper/contents/ui/main.qml
+@@ -0,0 +1,144 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Layouts
++import QtQuick.Window
++
++import org.kde.kirigami as Kirigami
++import org.kde.plasmasetup.wallpaperutil as Wallpaper
++
++import org.kde.plasmasetup.components as PlasmaSetupComponents
++
++/**
++* @brief Module for choosing the desktop wallpaper
++*
++* Shows the wallpapers listed in plasma-setup/wallpapers.json as a grid of
++* thumbnails, in their dark variant while the dark theme is on.
++*/
++PlasmaSetupComponents.SetupModule {
++    id: root
++
++    // Nothing to choose from with a single wallpaper
++    available: Wallpaper.WallpaperUtil.wallpapers.length > 1
++    nextEnabled: true
++
++    contentItem: ColumnLayout {
++        spacing: Kirigami.Units.smallSpacing
++
++        Label {
++            Layout.leftMargin: Kirigami.Units.gridUnit
++            Layout.rightMargin: Kirigami.Units.gridUnit
++            Layout.bottomMargin: Kirigami.Units.gridUnit
++            Layout.fillWidth: true
++
++            wrapMode: Text.Wrap
++            horizontalAlignment: Text.AlignHCenter
++            text: i18n("Choose a wallpaper for your desktop. You can change it later in System Settings.")
++        }
++
++        ScrollView {
++            Layout.fillWidth: true
++            Layout.fillHeight: true
++
++            GridView {
++                id: grid
++
++                readonly property bool dark: Kirigami.ColorUtils.brightnessForColor(Kirigami.Theme.backgroundColor) === Kirigami.ColorUtils.Dark
++                readonly property int columns: Math.max(2, Math.floor(width / (Kirigami.Units.gridUnit * 9)))
++
++                clip: true
++                keyNavigationEnabled: true
++                cellWidth: Math.floor(width / columns)
++                cellHeight: Math.round((cellWidth - Kirigami.Units.largeSpacing) * 9 / 16) + Kirigami.Units.largeSpacing * 2 + Kirigami.Units.gridUnit
++                model: Wallpaper.WallpaperUtil.wallpapers
++                currentIndex: model.findIndex(wallpaper => wallpaper.id === Wallpaper.WallpaperUtil.selected)
++                // Arrow keys pick, like in a group of radio buttons
++                onCurrentIndexChanged: {
++                    if (currentIndex >= 0) {
++                        Wallpaper.WallpaperUtil.selected = model[currentIndex].id;
++                    }
++                }
++
++                delegate: AbstractButton {
++                    id: delegate
++
++                    required property var modelData
++                    required property int index
++                    readonly property bool selected: modelData.id === Wallpaper.WallpaperUtil.selected
++
++                    width: grid.cellWidth
++                    height: grid.cellHeight
++                    padding: Kirigami.Units.largeSpacing / 2
++                    hoverEnabled: true
++                    focusPolicy: Qt.StrongFocus
++
++                    text: modelData.name
++                    Accessible.role: Accessible.RadioButton
++                    Accessible.checked: selected
++                    Accessible.description: modelData.author
++
++                    onClicked: grid.currentIndex = index
++
++                    contentItem: ColumnLayout {
++                        spacing: Kirigami.Units.smallSpacing
++
++                        Kirigami.ShadowedImage {
++                            Layout.fillWidth: true
++                            Layout.preferredHeight: Math.round(width * 9 / 16)
++
++                            source: grid.dark ? delegate.modelData.previewDark : delegate.modelData.preview
++                            sourceSize.width: width * Screen.devicePixelRatio
++                            fillMode: Image.PreserveAspectCrop
++                            asynchronous: true
++                            color: Kirigami.Theme.alternateBackgroundColor
++                            radius: Kirigami.Units.cornerRadius
++
++                            border.width: delegate.selected ? 2 : 1
++                            border.color: delegate.selected ? Kirigami.Theme.highlightColor
++                                : delegate.hovered || delegate.visualFocus ? Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.highlightColor, 0.6)
++                                : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.15)
++
++                            // The pick, marked like the selection in System Settings' wallpaper grid
++                            Rectangle {
++                                anchors.top: parent.top
++                                anchors.right: parent.right
++                                anchors.margins: Kirigami.Units.smallSpacing
++                                width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
++                                height: width
++                                radius: width / 2
++                                visible: delegate.selected
++                                // highlightedTextColor comes out dark with BlossomUI, the
++                                // Selection colours are right
++                                Kirigami.Theme.colorSet: Kirigami.Theme.Selection
++                                Kirigami.Theme.inherit: false
++                                color: Kirigami.Theme.backgroundColor
++
++                                Kirigami.Icon {
++                                    anchors.centerIn: parent
++                                    width: Kirigami.Units.iconSizes.small
++                                    height: width
++                                    source: "emblem-ok-symbolic"
++                                    isMask: true
++                                    roundToIconSize: false
++                                    color: Kirigami.Theme.textColor
++                                }
++                            }
++                        }
++
++                        Label {
++                            Layout.fillWidth: true
++                            text: delegate.text
++                            elide: Text.ElideRight
++                            horizontalAlignment: Text.AlignHCenter
++                            font.weight: delegate.selected ? Font.DemiBold : Font.Normal
++                        }
++                    }
++                }
++            }
++        }
++    }
++}
+diff --git a/modules/wallpaper/metadata.json b/modules/wallpaper/metadata.json
+new file mode 100644
+index 0000000..7bd516b
+--- /dev/null
++++ b/modules/wallpaper/metadata.json
+@@ -0,0 +1,21 @@
++{
++    "KPackageStructure": "KDE/PlasmaSetup",
++    "KPlugin": {
++        "Authors": [
++            {
++                "Email": "me@koyu.space",
++                "Name": "Leonie Ain"
++            }
++        ],
++        "Description": "Allow the user to choose the desktop wallpaper.",
++        "Description[de]": "Dem Benutzer erlauben, das Hintergrundbild der Arbeitsfläche auszuwählen.",
++        "Id": "org.kde.plasmasetup.wallpaper",
++        "License": "GPL-2.0-or-later",
++        "Name": "Wallpaper",
++        "Name[de]": "Hintergrundbild",
++        "Website": "https://blossomos.org"
++    },
++    "NoDisplay": true,
++    "X-KDE-ParentApp": "org.kde.plasmasetup",
++    "X-KDE-Weight": 15
++}
+diff --git a/modules/wallpaper/metadata.json.license b/modules/wallpaper/metadata.json.license
+new file mode 100644
+index 0000000..4ed95c4
+--- /dev/null
++++ b/modules/wallpaper/metadata.json.license
+@@ -0,0 +1,2 @@
++SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++SPDX-License-Identifier: GPL-2.0-or-later
+diff --git a/modules/wallpaperutil/CMakeLists.txt b/modules/wallpaperutil/CMakeLists.txt
+new file mode 100644
+index 0000000..c962ef1
+--- /dev/null
++++ b/modules/wallpaperutil/CMakeLists.txt
+@@ -0,0 +1,22 @@
++# SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++#
++# SPDX-License-Identifier: GPL-2.0-or-later
++
++ecm_add_qml_module(plasmasetup_wallpaperutil
++    URI "org.kde.plasmasetup.wallpaperutil"
++    GENERATE_PLUGIN_SOURCE
++)
++
++target_sources(plasmasetup_wallpaperutil PRIVATE
++    wallpaperutil.cpp
++    wallpaperutil.h
++)
++
++target_link_libraries(plasmasetup_wallpaperutil PRIVATE
++    Qt::Core
++    Qt::Quick
++    KF6::CoreAddons
++    KF6::ConfigCore
++)
++
++ecm_finalize_qml_module(plasmasetup_wallpaperutil)
+diff --git a/modules/wallpaperutil/wallpaperutil.cpp b/modules/wallpaperutil/wallpaperutil.cpp
+new file mode 100644
+index 0000000..7e680d6
+--- /dev/null
++++ b/modules/wallpaperutil/wallpaperutil.cpp
+@@ -0,0 +1,134 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "wallpaperutil.h"
++
++#include <KAboutData>
++#include <KConfigGroup>
++#include <KPluginMetaData>
++#include <KSharedConfig>
++
++#include <QDir>
++#include <QFile>
++#include <QJsonArray>
++#include <QJsonDocument>
++#include <QJsonObject>
++#include <QRegularExpression>
++#include <QStandardPaths>
++#include <QUrl>
++
++#include <algorithm>
++
++using namespace Qt::StringLiterals;
++
++namespace
++{
++// The smallest landscape image in a wallpaper package's images dir, as
++// thumbnails don't need more and big PNGs are slow to decode. Images are
++// named after their size, like 3840x2160.png
++QString smallestLandscapeImage(const QString &imagesDir)
++{
++    static const QRegularExpression sizeName(u"^(\\d+)x(\\d+)\\."_s);
++
++    QString best;
++    qint64 bestArea = 0;
++    const QStringList files = QDir(imagesDir).entryList(QDir::Files, QDir::Name);
++    for (const QString &file : files) {
++        const QRegularExpressionMatch match = sizeName.match(file);
++        if (!match.hasMatch()) {
++            continue;
++        }
++        const qint64 width = match.captured(1).toLongLong();
++        const qint64 height = match.captured(2).toLongLong();
++        if (width < height) {
++            continue;
++        }
++        if (best.isEmpty() || width * height < bestArea) {
++            best = imagesDir + u'/' + file;
++            bestArea = width * height;
++        }
++    }
++    return best;
++}
++}
++
++WallpaperUtil::WallpaperUtil(QObject *parent)
++    : QObject{parent}
++{
++    const QString listPath = QStandardPaths::locate(QStandardPaths::GenericDataLocation, u"plasma-setup/wallpapers.json"_s);
++    QFile listFile(listPath);
++    if (listPath.isEmpty() || !listFile.open(QIODevice::ReadOnly)) {
++        return;
++    }
++    const QJsonObject list = QJsonDocument::fromJson(listFile.readAll()).object();
++
++    QStringList ids;
++    const QJsonArray entries = list.value("wallpapers"_L1).toArray();
++    for (const QJsonValue &entry : entries) {
++        const QString id = entry.toString();
++        // Skip what isn't installed
++        const QString dir = QStandardPaths::locate(QStandardPaths::GenericDataLocation, u"wallpapers/"_s + id, QStandardPaths::LocateDirectory);
++        const QString preview = smallestLandscapeImage(dir + u"/contents/images"_s);
++        if (id.isEmpty() || dir.isEmpty() || preview.isEmpty() || ids.contains(id)) {
++            continue;
++        }
++        const QString previewDark = smallestLandscapeImage(dir + u"/contents/images_dark"_s);
++        const KPluginMetaData metaData = KPluginMetaData::fromJsonFile(dir + u"/metadata.json"_s);
++        const QList<KAboutPerson> authors = metaData.authors();
++
++        ids << id;
++        m_wallpapers << QVariantMap{
++            {u"id"_s, id},
++            {u"name"_s, metaData.name().isEmpty() ? id : metaData.name()},
++            {u"author"_s, authors.isEmpty() ? QString() : authors.first().name()},
++            {u"preview"_s, QUrl::fromLocalFile(preview)},
++            {u"previewDark"_s, QUrl::fromLocalFile(previewDark.isEmpty() ? preview : previewDark)},
++        };
++    }
++    if (ids.isEmpty()) {
++        return;
++    }
++
++    // Keep an earlier pick when the wizard is started again
++    const QString saved = QDir(KSharedConfig::openConfig(u"plasma-setuprc"_s)->group(u"Wallpaper"_s).readEntry("Image")).dirName();
++    const QString preselected = list.value("default"_L1).toString();
++    m_selected = ids.contains(saved) ? saved : ids.contains(preselected) ? preselected : ids.first();
++    save();
++}
++
++QVariantList WallpaperUtil::wallpapers() const
++{
++    return m_wallpapers;
++}
++
++QString WallpaperUtil::selected() const
++{
++    return m_selected;
++}
++
++void WallpaperUtil::setSelected(const QString &selected)
++{
++    if (selected == m_selected) {
++        return;
++    }
++    const bool known = std::any_of(m_wallpapers.cbegin(), m_wallpapers.cend(), [&selected](const QVariant &wallpaper) {
++        return wallpaper.toMap().value(u"id"_s).toString() == selected;
++    });
++    if (!known) {
++        return;
++    }
++
++    m_selected = selected;
++    save();
++    Q_EMIT selectedChanged();
++}
++
++void WallpaperUtil::save() const
++{
++    auto config = KSharedConfig::openConfig(u"plasma-setuprc"_s);
++    const QString dir = QStandardPaths::locate(QStandardPaths::GenericDataLocation, u"wallpapers/"_s + m_selected, QStandardPaths::LocateDirectory);
++    config->group(u"Wallpaper"_s).writeEntry("Image", dir);
++    config->sync();
++}
++
++#include "moc_wallpaperutil.cpp"
+diff --git a/modules/wallpaperutil/wallpaperutil.h b/modules/wallpaperutil/wallpaperutil.h
+new file mode 100644
+index 0000000..a0f1bfe
+--- /dev/null
++++ b/modules/wallpaperutil/wallpaperutil.h
+@@ -0,0 +1,51 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include <QObject>
++#include <QVariantList>
++#include <qqmlintegration.h>
++
++/*!
++ * The wallpapers offered on the wallpaper page, and the one picked.
++ *
++ * The list comes from plasma-setup/wallpapers.json in the data dirs: wallpaper
++ * package names from /usr/share/wallpapers and the one to preselect. The pick
++ * is kept in the setup user's plasma-setuprc, where the auth helper reads it
++ * to set the new user's desktop wallpaper.
++ */
++class WallpaperUtil : public QObject
++{
++    Q_OBJECT
++    QML_ELEMENT
++    QML_SINGLETON
++
++    /*!
++     * One map per installed wallpaper: id, name, author, and preview and
++     * previewDark (image URLs for the thumbnails).
++     */
++    Q_PROPERTY(QVariantList wallpapers READ wallpapers CONSTANT)
++
++    /*!
++     * The id (package name) of the picked wallpaper.
++     */
++    Q_PROPERTY(QString selected READ selected WRITE setSelected NOTIFY selectedChanged)
++
++public:
++    explicit WallpaperUtil(QObject *parent = nullptr);
++
++    QVariantList wallpapers() const;
++
++    QString selected() const;
++    void setSelected(const QString &selected);
++
++Q_SIGNALS:
++    void selectedChanged();
++
++private:
++    void save() const;
++
++    QVariantList m_wallpapers;
++    QString m_selected;
++};
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index 4501734..4a75f63 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -391,6 +391,15 @@ msgctxt "@action:button"
+ msgid "Finish"
+ msgstr "Abschließen"
+ 
++#: modules/wallpaper/contents/ui/main.qml:40
++#, kde-format
++msgid ""
++"Choose a wallpaper for your desktop. You can change it later in System "
++"Settings."
++msgstr ""
++"Wähle ein Hintergrundbild für deine Arbeitsfläche. Du kannst es später in "
++"den Systemeinstellungen ändern."
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Passen Sie die Größe der Elemente auf dem Bildschirm an."
+ 
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index 4fa868b..7ccbdd8 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -13,9 +13,12 @@
+ #include <KSharedConfig>
+ 
+ #include <QDir>
++#include <QFile>
++#include <QFileInfo>
+ #include <QProcess>
+ #include <QRegularExpression>
+ #include <QStandardPaths>
++#include <QUrl>
+ #include <QtDBus/QDBusInterface>
+ #include <QtDBus/QDBusPendingReply>
+ #include <QtDBus/QDBusReply>
+@@ -444,6 +447,17 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+         return makeErrorReply(QStringLiteral("Error copying file to temporary location: ") + QString::fromStdString(e.what()));
+     }
+ 
++    // The wallpaper picked on the wallpaper page, if it was shown
++    std::unique_ptr<QTemporaryFile> wallpaperFile;
++    const QString wallpaperSourcePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config/plasma-setuprc");
++    if (QFile::exists(wallpaperSourcePath)) {
++        try {
++            wallpaperFile = copyToTempFile(wallpaperSourcePath);
++        } catch (const std::runtime_error &e) {
++            return makeErrorReply(QStringLiteral("Error copying file to temporary location: ") + QString::fromStdString(e.what()));
++        }
++    }
++
+     try {
+         PrivilegeGuard guard(userInfo);
+ 
+@@ -511,6 +525,33 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+             }
+         }
+ 
++        // Put the picked wallpaper on the desktop containment(s) of the layout
++        // /etc/skel gave the new user. Only installed wallpapers, the setup
++        // user can write anything into its config
++        const QString wallpaper = wallpaperFile
++            ? QDir::cleanPath(KConfig(wallpaperFile->fileName(), KConfig::SimpleConfig).group(QStringLiteral("Wallpaper")).readEntry("Image"))
++            : QString();
++        const QString appletsPath = QDir::cleanPath(configDirPath + QStringLiteral("/plasma-org.kde.plasma.desktop-appletsrc"));
++        if (wallpaper.startsWith(QLatin1String("/usr/share/wallpapers/")) && QFileInfo(wallpaper).isDir() && QFile::exists(appletsPath)) {
++            KConfig applets(appletsPath, KConfig::SimpleConfig);
++            KConfigGroup containments = applets.group(QStringLiteral("Containments"));
++            const QStringList ids = containments.groupList();
++            for (const QString &id : ids) {
++                KConfigGroup containment = containments.group(id);
++                const QString plugin = containment.readEntry("plugin");
++                if (plugin != QLatin1String("org.kde.plasma.folder") && plugin != QLatin1String("org.kde.desktop")) {
++                    continue;
++                }
++                containment.group(QStringLiteral("Wallpaper"))
++                    .group(QStringLiteral("org.kde.image"))
++                    .group(QStringLiteral("General"))
++                    .writeEntry("Image", QUrl::fromLocalFile(wallpaper + QLatin1Char('/')).toString());
++            }
++            if (!applets.sync()) {
++                return makeErrorReply(QStringLiteral("Unable to write ") + appletsPath);
++            }
++        }
++
+         return ActionReply::SuccessReply();
+     } catch (const std::runtime_error &e) {
+         return makeErrorReply(QStringLiteral("Failed to drop privileges: ") + QString::fromStdString(e.what()));

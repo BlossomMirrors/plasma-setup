@@ -1,0 +1,1062 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 05:19:33 +0200
+Subject: [PATCH 10/10] Add a web browser page
+
+After the updates page, offers the browsers on the Forge browser list
+(the one the Arc Store shows). Ticked ones are installed and unticked
+ones removed right away, one after another, as system-wide Flatpaks
+through libflatpak, since the setup user's home doesn't survive setup.
+Setup only goes on with at least one browser. One of the installed
+ones, the first by default, becomes the new user's default browser in
+mimeapps.list and kdeglobals.
+
+Like the updates page, it is skipped without an internet connection.
+The setup user may install Flatpak apps and runtimes, and remove apps,
+without asking.
+In a preview installs are simulated.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ files/plasma-setup-polkit.rules       |   3 +
+ modules/CMakeLists.txt                |   4 +
+ modules/browser/CMakeLists.txt        |  12 +
+ modules/browser/contents/ui/main.qml  | 182 +++++++++++
+ modules/browser/metadata.json         |  21 ++
+ modules/browser/metadata.json.license |   2 +
+ modules/browserutil/CMakeLists.txt    |  27 ++
+ modules/browserutil/browserutil.cpp   | 453 ++++++++++++++++++++++++++
+ modules/browserutil/browserutil.h     | 112 +++++++
+ po/de/org.kde.plasmasetup.po          |  57 ++++
+ src/auth/authhelper.cpp               |  34 +-
+ 11 files changed, 900 insertions(+), 7 deletions(-)
+ create mode 100644 modules/browser/CMakeLists.txt
+ create mode 100644 modules/browser/contents/ui/main.qml
+ create mode 100644 modules/browser/metadata.json
+ create mode 100644 modules/browser/metadata.json.license
+ create mode 100644 modules/browserutil/CMakeLists.txt
+ create mode 100644 modules/browserutil/browserutil.cpp
+ create mode 100644 modules/browserutil/browserutil.h
+
+diff --git a/files/plasma-setup-polkit.rules b/files/plasma-setup-polkit.rules
+index cabae84..6ce927a 100644
+--- a/files/plasma-setup-polkit.rules
++++ b/files/plasma-setup-polkit.rules
+@@ -35,6 +35,9 @@ polkit.addRule(function (action, subject) {
+         "org.projectatomic.rpmostree1.upgrade", // Download and stage system updates
+         "org.freedesktop.login1.reboot", // Restart into the update
+         "org.freedesktop.login1.reboot-multiple-sessions", // Restart into the update with other sessions open
++        "org.freedesktop.Flatpak.app-install", // Install the browsers picked, system-wide
++        "org.freedesktop.Flatpak.runtime-install", // ...and the runtimes they need
++        "org.freedesktop.Flatpak.app-uninstall", // Remove the browsers unticked
+     ];
+ 
+     // Check if the current action is in our allowed list.
+diff --git a/modules/CMakeLists.txt b/modules/CMakeLists.txt
+index b184b8e..cc2f1d8 100644
+--- a/modules/CMakeLists.txt
++++ b/modules/CMakeLists.txt
+@@ -5,6 +5,9 @@
+ add_subdirectory(account)
+ kpackage_install_package(account org.kde.plasmasetup.account packages plasma)
+ 
++add_subdirectory(browser)
++kpackage_install_package(browser org.kde.plasmasetup.browser packages plasma)
++
+ # add_subdirectory(cellular)
+ # kpackage_install_package(cellular org.kde.plasmasetup.cellular packages plasma)
+ 
+@@ -40,6 +43,7 @@ kpackage_install_package(wifi org.kde.plasmasetup.wifi packages plasma)
+ 
+ # Helper utilities should be kept separate from the KPackage modules, otherwise
+ # kpackage_install_package() will include all of the uncompiled source files.
++add_subdirectory(browserutil)
+ add_subdirectory(hostnameutil)
+ add_subdirectory(languageutil)
+ add_subdirectory(prepareutil)
+diff --git a/modules/browser/CMakeLists.txt b/modules/browser/CMakeLists.txt
+new file mode 100644
+index 0000000..d359c0a
+--- /dev/null
++++ b/modules/browser/CMakeLists.txt
+@@ -0,0 +1,12 @@
++# SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++#
++# SPDX-License-Identifier: GPL-2.0-or-later
++
++ecm_add_qml_module(plasmasetup_browser
++    URI "org.kde.plasmasetup.browser"
++    GENERATE_PLUGIN_SOURCE
++    DEPENDENCIES
++        Qt::Core
++)
++
++ecm_finalize_qml_module(plasmasetup_browser)
+diff --git a/modules/browser/contents/ui/main.qml b/modules/browser/contents/ui/main.qml
+new file mode 100644
+index 0000000..0f4ba5a
+--- /dev/null
++++ b/modules/browser/contents/ui/main.qml
+@@ -0,0 +1,182 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Layouts
++
++import org.kde.kirigami as Kirigami
++import org.kde.plasmasetup
++import org.kde.plasmasetup.browserutil as Browser
++
++import org.kde.plasmasetup.components as PlasmaSetupComponents
++
++/**
++* @brief Module for choosing web browsers
++*
++* Offers the browsers on the Forge browser list, the one the Arc Store
++* shows. Ticked browsers are installed right away and unticked ones removed,
++* one after another, and one of the installed ones becomes the new user's
++* default. Setup needs at least one. Skipped without internet.
++*/
++PlasmaSetupComponents.SetupModule {
++    id: root
++
++    // Setup needs a browser; only when the list couldn't load there is
++    // nothing to pick from
++    nextEnabled: !Browser.BrowserUtil.loading && !Browser.BrowserUtil.busy && (Browser.BrowserUtil.hasBrowser || list.count === 0)
++
++    function skipPage(): bool {
++        return !InitialStartUtil.online();
++    }
++
++    function onPageActivated(): void {
++        Browser.BrowserUtil.start();
++    }
++
++    contentItem: ColumnLayout {
++        spacing: Kirigami.Units.smallSpacing
++
++        Label {
++            Layout.leftMargin: Kirigami.Units.gridUnit
++            Layout.rightMargin: Kirigami.Units.gridUnit
++            Layout.bottomMargin: Kirigami.Units.gridUnit
++            Layout.fillWidth: true
++
++            wrapMode: Text.Wrap
++            horizontalAlignment: Text.AlignHCenter
++            text: i18n("Choose the web browsers you want. You can install more later in the Arc Store.")
++        }
++
++        BusyIndicator {
++            Layout.alignment: Qt.AlignHCenter
++            visible: Browser.BrowserUtil.loading
++            running: visible
++        }
++
++        Kirigami.InlineMessage {
++            Layout.fillWidth: true
++            visible: Browser.BrowserUtil.error !== ""
++            type: Kirigami.MessageType.Warning
++            text: Browser.BrowserUtil.error
++        }
++
++        ScrollView {
++            Layout.fillWidth: true
++            Layout.fillHeight: true
++            visible: !Browser.BrowserUtil.loading && list.count > 0
++
++            Component.onCompleted: {
++                if (background) {
++                    background.visible = true;
++                }
++            }
++
++            ListView {
++                id: list
++                clip: true
++                model: Browser.BrowserUtil.browsers
++
++                delegate: ItemDelegate {
++                    id: delegate
++
++                    required property var modelData
++
++                    width: ListView.view.width
++                    text: modelData.name
++                    // Ticked ones get installed, unticked ones removed
++                    onClicked: {
++                        if (!modelData.working) {
++                            Browser.BrowserUtil.setWanted(modelData.id, !modelData.wanted);
++                        }
++                    }
++
++                    Accessible.role: Accessible.CheckBox
++                    Accessible.checked: check.checked
++
++                    contentItem: RowLayout {
++                        spacing: Kirigami.Units.largeSpacing
++
++                        CheckBox {
++                            id: check
++                            checked: delegate.modelData.wanted
++                            enabled: !delegate.modelData.working
++                            onToggled: Browser.BrowserUtil.setWanted(delegate.modelData.id, checked)
++                        }
++
++                        Image {
++                            Layout.preferredWidth: Kirigami.Units.iconSizes.medium
++                            Layout.preferredHeight: Kirigami.Units.iconSizes.medium
++                            source: delegate.modelData.icon
++                            sourceSize.width: width * Screen.devicePixelRatio
++                            sourceSize.height: height * Screen.devicePixelRatio
++                            fillMode: Image.PreserveAspectFit
++                            asynchronous: true
++                        }
++
++                        Label {
++                            Layout.fillWidth: true
++                            text: delegate.text
++                            elide: Text.ElideRight
++                        }
++
++                        ProgressBar {
++                            Layout.preferredWidth: Kirigami.Units.gridUnit * 5
++                            visible: delegate.modelData.working
++                            from: 0
++                            to: 100
++                            value: Browser.BrowserUtil.percent
++                            indeterminate: Browser.BrowserUtil.percent === 0
++                        }
++
++                        Label {
++                            visible: text !== ""
++                            opacity: 0.7
++                            text: {
++                                const browser = delegate.modelData;
++                                if (browser.working) {
++                                    return browser.wanted ? "" : i18n("Removing…");
++                                } else if (browser.pending) {
++                                    return browser.wanted ? i18n("Waiting…") : i18n("Will be removed");
++                                }
++                                return browser.installed ? i18n("Installed") : "";
++                            }
++                        }
++                    }
++                }
++            }
++        }
++
++        Label {
++            Layout.fillWidth: true
++            Layout.topMargin: Kirigami.Units.largeSpacing
++            horizontalAlignment: Text.AlignHCenter
++            wrapMode: Text.Wrap
++            visible: list.count > 0 && !Browser.BrowserUtil.hasBrowser
++            color: Kirigami.Theme.neutralTextColor
++            text: i18n("Choose at least one browser to continue.")
++        }
++
++        RowLayout {
++            Layout.fillWidth: true
++            Layout.topMargin: Kirigami.Units.largeSpacing
++            visible: defaultBox.count > 1
++
++            Label {
++                text: i18n("Default browser:")
++            }
++
++            ComboBox {
++                id: defaultBox
++                Layout.fillWidth: true
++                model: Browser.BrowserUtil.browsers.filter(browser => browser.installed)
++                textRole: "name"
++                valueRole: "id"
++                currentIndex: model.findIndex(browser => browser.id === Browser.BrowserUtil.defaultBrowser)
++                onActivated: Browser.BrowserUtil.defaultBrowser = currentValue
++            }
++        }
++    }
++}
+diff --git a/modules/browser/metadata.json b/modules/browser/metadata.json
+new file mode 100644
+index 0000000..559bc54
+--- /dev/null
++++ b/modules/browser/metadata.json
+@@ -0,0 +1,21 @@
++{
++    "KPackageStructure": "KDE/PlasmaSetup",
++    "KPlugin": {
++        "Authors": [
++            {
++                "Email": "me@koyu.space",
++                "Name": "Leonie Ain"
++            }
++        ],
++        "Description": "Allow the user to install web browsers and choose the default one.",
++        "Description[de]": "Dem Benutzer erlauben, Webbrowser zu installieren und den Standardbrowser auszuwählen.",
++        "Id": "org.kde.plasmasetup.browser",
++        "License": "GPL-2.0-or-later",
++        "Name": "Web Browsers",
++        "Name[de]": "Webbrowser",
++        "Website": "https://blossomos.org"
++    },
++    "NoDisplay": true,
++    "X-KDE-ParentApp": "org.kde.plasmasetup",
++    "X-KDE-Weight": 57
++}
+diff --git a/modules/browser/metadata.json.license b/modules/browser/metadata.json.license
+new file mode 100644
+index 0000000..4ed95c4
+--- /dev/null
++++ b/modules/browser/metadata.json.license
+@@ -0,0 +1,2 @@
++SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++SPDX-License-Identifier: GPL-2.0-or-later
+diff --git a/modules/browserutil/CMakeLists.txt b/modules/browserutil/CMakeLists.txt
+new file mode 100644
+index 0000000..8ae5547
+--- /dev/null
++++ b/modules/browserutil/CMakeLists.txt
+@@ -0,0 +1,27 @@
++# SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++#
++# SPDX-License-Identifier: GPL-2.0-or-later
++
++find_package(PkgConfig REQUIRED)
++pkg_check_modules(Flatpak REQUIRED IMPORTED_TARGET flatpak)
++
++ecm_add_qml_module(plasmasetup_browserutil
++    URI "org.kde.plasmasetup.browserutil"
++    GENERATE_PLUGIN_SOURCE
++)
++
++target_sources(plasmasetup_browserutil PRIVATE
++    browserutil.cpp
++    browserutil.h
++)
++
++target_link_libraries(plasmasetup_browserutil PRIVATE
++    Qt::Core
++    Qt::Network
++    Qt::Quick
++    KF6::ConfigCore
++    KF6::I18n
++    PkgConfig::Flatpak
++)
++
++ecm_finalize_qml_module(plasmasetup_browserutil)
+diff --git a/modules/browserutil/browserutil.cpp b/modules/browserutil/browserutil.cpp
+new file mode 100644
+index 0000000..bccb962
+--- /dev/null
++++ b/modules/browserutil/browserutil.cpp
+@@ -0,0 +1,453 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "browserutil.h"
++
++#include <KConfigGroup>
++#include <KLocalizedString>
++#include <KSharedConfig>
++
++#include <QJsonArray>
++#include <QJsonDocument>
++#include <QJsonObject>
++#include <QNetworkAccessManager>
++#include <QNetworkReply>
++#include <QNetworkRequest>
++#include <QPointer>
++#include <QThread>
++#include <QTimer>
++
++#include <flatpak.h>
++
++#include <algorithm>
++#include <functional>
++
++using namespace Qt::StringLiterals;
++
++namespace
++{
++// The list the Arc Store shows as "Browser"
++constexpr auto FORGE_BROWSER_LIST = "https://forge.arcstore.net/api/lists/browser";
++
++bool preview()
++{
++    return qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1;
++}
++
++QString takeError(GError *error)
++{
++    const QString message = error ? QString::fromUtf8(error->message) : i18n("Unknown error");
++    g_clear_error(&error);
++    return message;
++}
++
++bool installedOnSystem(const QString &id)
++{
++    GError *error = nullptr;
++    FlatpakInstallation *installation = flatpak_installation_new_system(nullptr, &error);
++    if (!installation) {
++        g_clear_error(&error);
++        return false;
++    }
++    FlatpakInstalledRef *ref = flatpak_installation_get_current_installed_app(installation, id.toUtf8().constData(), nullptr, &error);
++    g_clear_error(&error);
++    const bool installed = ref != nullptr;
++    g_clear_object(&ref);
++    g_object_unref(installation);
++    return installed;
++}
++
++// The remote and full ref of the app, from the enabled system remotes by
++// priority, preferring the stable branch
++bool findRemoteRef(FlatpakInstallation *installation, const QString &id, GCancellable *cancellable, QByteArray &remote, QByteArray &ref, QString &errorMessage)
++{
++    GError *error = nullptr;
++    GPtrArray *remotes = flatpak_installation_list_remotes(installation, cancellable, &error);
++    if (!remotes) {
++        errorMessage = takeError(error);
++        return false;
++    }
++    QList<FlatpakRemote *> sorted;
++    for (guint i = 0; i < remotes->len; ++i) {
++        auto *candidate = FLATPAK_REMOTE(g_ptr_array_index(remotes, i));
++        if (!flatpak_remote_get_disabled(candidate)) {
++            sorted << candidate;
++        }
++    }
++    std::stable_sort(sorted.begin(), sorted.end(), [](FlatpakRemote *a, FlatpakRemote *b) {
++        return flatpak_remote_get_prio(a) > flatpak_remote_get_prio(b);
++    });
++
++    const QByteArray name = id.toUtf8();
++    const char *arch = flatpak_get_default_arch();
++    for (FlatpakRemote *candidate : std::as_const(sorted)) {
++        GPtrArray *refs = flatpak_installation_list_remote_refs_sync(installation, flatpak_remote_get_name(candidate), cancellable, &error);
++        if (!refs) {
++            g_clear_error(&error);
++            continue;
++        }
++        QByteArray found;
++        for (guint i = 0; i < refs->len; ++i) {
++            auto *candidateRef = FLATPAK_REF(g_ptr_array_index(refs, i));
++            if (flatpak_ref_get_kind(candidateRef) != FLATPAK_REF_KIND_APP || name != flatpak_ref_get_name(candidateRef)
++                || qstrcmp(arch, flatpak_ref_get_arch(candidateRef)) != 0) {
++                continue;
++            }
++            if (found.isEmpty() || qstrcmp(flatpak_ref_get_branch(candidateRef), "stable") == 0) {
++                char *formatted = flatpak_ref_format_ref(candidateRef);
++                found = formatted;
++                g_free(formatted);
++            }
++        }
++        g_ptr_array_unref(refs);
++        if (!found.isEmpty()) {
++            remote = flatpak_remote_get_name(candidate);
++            ref = found;
++            g_ptr_array_unref(remotes);
++            return true;
++        }
++    }
++    g_ptr_array_unref(remotes);
++    errorMessage = i18n("%1 isn't available from any software source.", id);
++    return false;
++}
++
++// Progress over all operations of a transaction (the app and the runtimes it
++// needs), handed to the Qt side
++struct TransactionProgress {
++    QPointer<QObject> receiver;
++    std::function<void(int)> report;
++    int operation = -1;
++    int operations = 1;
++};
++
++void onProgressChanged(FlatpakTransactionProgress *progress, gpointer data)
++{
++    auto *state = static_cast<TransactionProgress *>(data);
++    const int overall = (state->operation * 100 + flatpak_transaction_progress_get_progress(progress)) / state->operations;
++    QMetaObject::invokeMethod(state->receiver, [report = state->report, overall] {
++        report(overall);
++    });
++}
++
++void onNewOperation(FlatpakTransaction *transaction, FlatpakTransactionOperation *, FlatpakTransactionProgress *progress, gpointer data)
++{
++    auto *state = static_cast<TransactionProgress *>(data);
++    GList *operations = flatpak_transaction_get_operations(transaction);
++    state->operations = std::max(1u, g_list_length(operations));
++    g_list_free_full(operations, g_object_unref);
++    ++state->operation;
++    flatpak_transaction_progress_set_update_frequency(progress, 250);
++    g_signal_connect(progress, "changed", G_CALLBACK(onProgressChanged), data);
++}
++
++// Runs a transaction that add() fills, reporting its progress
++QString runTransaction(FlatpakInstallation *installation,
++                       GCancellable *cancellable,
++                       TransactionProgress *progress,
++                       const std::function<bool(FlatpakTransaction *, GError **)> &add)
++{
++    GError *error = nullptr;
++    FlatpakTransaction *transaction = flatpak_transaction_new_for_installation(installation, cancellable, &error);
++    if (!transaction) {
++        return takeError(error);
++    }
++    QString message;
++    flatpak_transaction_set_no_interaction(transaction, TRUE);
++    flatpak_transaction_add_default_dependency_sources(transaction);
++    g_signal_connect(transaction, "new-operation", G_CALLBACK(onNewOperation), progress);
++    if (!add(transaction, &error) || !flatpak_transaction_run(transaction, cancellable, &error)) {
++        message = takeError(error);
++    }
++    g_object_unref(transaction);
++    return message;
++}
++
++// Installs or removes the app, in the worker thread
++QString change(const QString &id, bool install, GCancellable *cancellable, TransactionProgress *progress)
++{
++    GError *error = nullptr;
++    FlatpakInstallation *installation = flatpak_installation_new_system(cancellable, &error);
++    if (!installation) {
++        return takeError(error);
++    }
++
++    QString message;
++    if (install) {
++        QByteArray remote;
++        QByteArray ref;
++        if (findRemoteRef(installation, id, cancellable, remote, ref, message)) {
++            message = runTransaction(installation, cancellable, progress, [&remote, &ref](FlatpakTransaction *transaction, GError **error) {
++                return flatpak_transaction_add_install(transaction, remote.constData(), ref.constData(), nullptr, error);
++            });
++        }
++    } else {
++        FlatpakInstalledRef *installed = flatpak_installation_get_current_installed_app(installation, id.toUtf8().constData(), cancellable, &error);
++        g_clear_error(&error);
++        // Already gone otherwise
++        if (installed) {
++            char *formatted = flatpak_ref_format_ref(FLATPAK_REF(installed));
++            const QByteArray ref = formatted;
++            g_free(formatted);
++            g_object_unref(installed);
++            message = runTransaction(installation, cancellable, progress, [&ref](FlatpakTransaction *transaction, GError **error) {
++                return flatpak_transaction_add_uninstall(transaction, ref.constData(), error);
++            });
++        }
++    }
++    g_object_unref(installation);
++    return message;
++}
++}
++
++BrowserUtil::BrowserUtil(QObject *parent)
++    : QObject{parent}
++    , m_network{new QNetworkAccessManager(this)}
++    , m_cancellable{g_cancellable_new()}
++{
++}
++
++BrowserUtil::~BrowserUtil()
++{
++    g_cancellable_cancel(m_cancellable);
++    if (m_worker) {
++        m_worker->wait();
++    }
++    g_object_unref(m_cancellable);
++}
++
++QVariantList BrowserUtil::browsers() const
++{
++    QVariantList list;
++    for (const Browser &browser : m_browsers) {
++        list << QVariantMap{
++            {u"id"_s, browser.id},
++            {u"name"_s, browser.name},
++            {u"icon"_s, browser.icon},
++            {u"installed"_s, browser.installed},
++            {u"wanted"_s, browser.wanted},
++            {u"working"_s, browser.id == m_current},
++            {u"pending"_s, browser.wanted != browser.installed && browser.id != m_current},
++        };
++    }
++    return list;
++}
++
++bool BrowserUtil::loading() const
++{
++    return m_loading;
++}
++
++QString BrowserUtil::error() const
++{
++    return m_error;
++}
++
++bool BrowserUtil::busy() const
++{
++    return !m_current.isEmpty() || std::any_of(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++        return browser.wanted != browser.installed;
++    });
++}
++
++bool BrowserUtil::hasBrowser() const
++{
++    return std::any_of(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++        return browser.wanted;
++    });
++}
++
++int BrowserUtil::percent() const
++{
++    return m_percent;
++}
++
++QString BrowserUtil::defaultBrowser() const
++{
++    return m_default;
++}
++
++void BrowserUtil::setDefaultBrowser(const QString &id)
++{
++    const auto it = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [&id](const Browser &browser) {
++        return browser.id == id && browser.installed;
++    });
++    if (id == m_default || it == m_browsers.cend()) {
++        return;
++    }
++    m_default = id;
++    save();
++    Q_EMIT defaultBrowserChanged();
++}
++
++void BrowserUtil::start()
++{
++    if (m_started) {
++        return;
++    }
++    m_started = true;
++    m_loading = true;
++    Q_EMIT loadingChanged();
++
++    QNetworkRequest request{QUrl(QLatin1String(FORGE_BROWSER_LIST))};
++    request.setTransferTimeout(15000);
++    QNetworkReply *reply = m_network->get(request);
++    connect(reply, &QNetworkReply::finished, this, [this, reply] {
++        reply->deleteLater();
++        m_loading = false;
++        if (reply->error() != QNetworkReply::NoError) {
++            // Try again when the page is shown again, maybe online by then
++            m_started = false;
++            setError(reply->errorString());
++            Q_EMIT loadingChanged();
++            return;
++        }
++        setError(QString());
++
++        const QJsonArray apps = QJsonDocument::fromJson(reply->readAll()).object().value("apps"_L1).toArray();
++        for (const QJsonValue &value : apps) {
++            const QJsonObject app = value.toObject();
++            Browser browser;
++            browser.id = app.value("ref"_L1).toString();
++            browser.name = app.value("name"_L1).toString();
++            browser.icon = app.value("icon_url"_L1).toString();
++            const bool known = std::any_of(m_browsers.cbegin(), m_browsers.cend(), [&browser](const Browser &other) {
++                return other.id == browser.id;
++            });
++            if (browser.id.isEmpty() || browser.name.isEmpty() || known) {
++                continue;
++            }
++            browser.installed = installedOnSystem(browser.id);
++            browser.wanted = browser.installed;
++            m_browsers << browser;
++        }
++        pickDefault();
++        Q_EMIT browsersChanged();
++        Q_EMIT loadingChanged();
++    });
++}
++
++void BrowserUtil::setWanted(const QString &id, bool wanted)
++{
++    for (Browser &browser : m_browsers) {
++        if (browser.id == id && browser.id != m_current && browser.wanted != wanted) {
++            browser.wanted = wanted;
++            Q_EMIT browsersChanged();
++            processNext();
++            return;
++        }
++    }
++}
++
++void BrowserUtil::setError(const QString &error)
++{
++    if (m_error == error) {
++        return;
++    }
++    m_error = error;
++    Q_EMIT errorChanged();
++}
++
++// Installs or removes the next browser that isn't how it was picked, one at
++// a time
++void BrowserUtil::processNext()
++{
++    if (!m_current.isEmpty()) {
++        return;
++    }
++    const auto next = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++        return browser.wanted != browser.installed;
++    });
++    if (next == m_browsers.cend()) {
++        return;
++    }
++    m_current = next->id;
++    m_percent = 0;
++    setError(QString());
++    Q_EMIT progressChanged();
++    Q_EMIT browsersChanged();
++
++    const QString id = m_current;
++    const bool install = next->wanted;
++    if (preview()) {
++        // Pretend, the preview changes nothing on the system
++        auto *timer = new QTimer(this);
++        timer->setInterval(install ? 80 : 20);
++        connect(timer, &QTimer::timeout, this, [this, timer, id, install] {
++            m_percent = std::min(100, m_percent + 2);
++            Q_EMIT progressChanged();
++            if (m_percent == 100) {
++                timer->deleteLater();
++                changeFinished(id, install, QString());
++            }
++        });
++        timer->start();
++        return;
++    }
++
++    auto *progress = new TransactionProgress{this, [this](int percent) {
++                                                 m_percent = std::clamp(percent, m_percent, 100);
++                                                 Q_EMIT progressChanged();
++                                             }};
++    GCancellable *cancellable = m_cancellable;
++    m_worker = QThread::create([this, id, install, cancellable, progress] {
++        const QString error = change(id, install, cancellable, progress);
++        QMetaObject::invokeMethod(this, [this, id, install, error] {
++            changeFinished(id, install, error);
++        });
++    });
++    connect(m_worker, &QThread::finished, m_worker, &QObject::deleteLater);
++    connect(m_worker, &QThread::finished, this, [this, progress] {
++        delete progress;
++        m_worker = nullptr;
++    });
++    m_worker->start();
++}
++
++void BrowserUtil::changeFinished(const QString &id, bool install, const QString &error)
++{
++    m_current.clear();
++    for (Browser &browser : m_browsers) {
++        if (browser.id != id) {
++            continue;
++        }
++        browser.installed = preview() ? (error.isEmpty() == install) : installedOnSystem(id);
++        // Show how it really is when it failed
++        if (!error.isEmpty()) {
++            browser.wanted = browser.installed;
++        }
++    }
++    if (!error.isEmpty()) {
++        setError(install ? i18nc("%1 is a browser, %2 the error", "Couldn't install %1: %2", id, error)
++                         : i18nc("%1 is a browser, %2 the error", "Couldn't remove %1: %2", id, error));
++    }
++    pickDefault();
++    Q_EMIT browsersChanged();
++    processNext();
++}
++
++// The first installed browser on the list, unless one was picked
++void BrowserUtil::pickDefault()
++{
++    const bool keep = std::any_of(m_browsers.cbegin(), m_browsers.cend(), [this](const Browser &browser) {
++        return browser.installed && browser.id == m_default;
++    });
++    if (keep) {
++        return;
++    }
++    const auto first = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++        return browser.installed;
++    });
++    m_default = first == m_browsers.cend() ? QString() : first->id;
++    save();
++    Q_EMIT defaultBrowserChanged();
++}
++
++void BrowserUtil::save() const
++{
++    auto config = KSharedConfig::openConfig(u"plasma-setuprc"_s);
++    config->group(u"Browser"_s).writeEntry("Default", m_default);
++    config->sync();
++}
++
++#include "moc_browserutil.cpp"
+diff --git a/modules/browserutil/browserutil.h b/modules/browserutil/browserutil.h
+new file mode 100644
+index 0000000..76779f2
+--- /dev/null
++++ b/modules/browserutil/browserutil.h
+@@ -0,0 +1,112 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include <QObject>
++#include <QStringList>
++#include <QVariantList>
++#include <qqmlintegration.h>
++
++class QNetworkAccessManager;
++class QThread;
++typedef struct _GCancellable GCancellable;
++
++/*!
++ * The browsers on the Forge browser list (the one the Arc Store shows),
++ * installing the ones ticked and removing the ones unticked, and which one
++ * the new user gets as default.
++ *
++ * Browsers are Flatpaks and go into the system installation, the setup
++ * user's home doesn't survive setup. The default is kept in the setup user's
++ * plasma-setuprc, where the auth helper reads it for the new user.
++ */
++class BrowserUtil : public QObject
++{
++    Q_OBJECT
++    QML_ELEMENT
++    QML_SINGLETON
++
++    /*!
++     * One map per browser on the list: id, name, icon (URL), installed,
++     * wanted (ticked), working (being installed or removed) and pending
++     * (waiting to be).
++     */
++    Q_PROPERTY(QVariantList browsers READ browsers NOTIFY browsersChanged)
++    Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
++    /*!
++     * Why the list couldn't be loaded, or the last install failed.
++     */
++    Q_PROPERTY(QString error READ error NOTIFY errorChanged)
++    /*!
++     * Whether browsers are being installed or removed, or wait to be.
++     */
++    Q_PROPERTY(bool busy READ busy NOTIFY browsersChanged)
++    /*!
++     * Whether at least one browser is ticked, setup needs one.
++     */
++    Q_PROPERTY(bool hasBrowser READ hasBrowser NOTIFY browsersChanged)
++    /*!
++     * Progress of the running install or removal in percent.
++     */
++    Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
++    Q_PROPERTY(QString defaultBrowser READ defaultBrowser WRITE setDefaultBrowser NOTIFY defaultBrowserChanged)
++
++public:
++    explicit BrowserUtil(QObject *parent = nullptr);
++    ~BrowserUtil() override;
++
++    QVariantList browsers() const;
++    bool loading() const;
++    QString error() const;
++    bool busy() const;
++    bool hasBrowser() const;
++    int percent() const;
++    QString defaultBrowser() const;
++    void setDefaultBrowser(const QString &id);
++
++    /*!
++     * Loads the list, once.
++     */
++    Q_INVOKABLE void start();
++
++    /*!
++     * Ticks or unticks the browser. Ticked browsers get installed, unticked
++     * ones removed, one after another.
++     */
++    Q_INVOKABLE void setWanted(const QString &id, bool wanted);
++
++Q_SIGNALS:
++    void browsersChanged();
++    void loadingChanged();
++    void errorChanged();
++    void progressChanged();
++    void defaultBrowserChanged();
++
++private:
++    struct Browser {
++        QString id;
++        QString name;
++        QString icon;
++        bool installed = false;
++        bool wanted = false;
++    };
++
++    void setError(const QString &error);
++    void processNext();
++    void changeFinished(const QString &id, bool install, const QString &error);
++    void pickDefault();
++    void save() const;
++
++    QNetworkAccessManager *m_network = nullptr;
++    QList<Browser> m_browsers;
++    bool m_started = false;
++    bool m_loading = false;
++    QString m_error;
++    QString m_current;
++    int m_percent = 0;
++    QString m_default;
++
++    QThread *m_worker = nullptr;
++    GCancellable *m_cancellable = nullptr;
++};
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index efd9e4d..793282f 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -448,6 +448,7 @@ msgctxt "downloaded of total size"
+ msgid "%1 of %2"
+ msgstr "%1 von %2"
+ 
++#: modules/browserutil/browserutil.cpp:38
+ #: modules/updatesutil/updatesutil.cpp:195
+ #, kde-format
+ msgid "Unknown error"
+@@ -458,6 +459,62 @@ msgstr "Unbekannter Fehler"
+ msgid "Failed to connect to rpm-ostree transaction"
+ msgstr "Verbindung zur rpm-ostree-Transaktion fehlgeschlagen"
+ 
++#: modules/browser/contents/ui/main.qml:47
++#, kde-format
++msgid ""
++"Choose the web browsers you want. You can install more later in the Arc "
++"Store."
++msgstr ""
++"Wähle die Webbrowser aus, die du möchtest. Weitere kannst du später im Arc "
++"Store installieren."
++
++#: modules/browser/contents/ui/main.qml:136
++#, kde-format
++msgid "Installed"
++msgstr "Installiert"
++
++#: modules/browser/contents/ui/main.qml:136
++#, kde-format
++msgid "Waiting…"
++msgstr "Wartet …"
++
++#: modules/browser/contents/ui/main.qml:149
++#, kde-format
++msgid "Default browser:"
++msgstr "Standardbrowser:"
++
++#: modules/browserutil/browserutil.cpp:110
++#, kde-format
++msgid "%1 isn't available from any software source."
++msgstr "%1 ist aus keiner Softwarequelle verfügbar."
++
++#: modules/browserutil/browserutil.cpp:377
++#, kde-format
++msgctxt "%1 is a browser, %2 the error"
++msgid "Couldn't install %1: %2"
++msgstr "%1 konnte nicht installiert werden: %2"
++
++#: modules/browser/contents/ui/main.qml:140
++#, kde-format
++msgid "Removing…"
++msgstr "Wird entfernt …"
++
++#: modules/browser/contents/ui/main.qml:142
++#, kde-format
++msgid "Will be removed"
++msgstr "Zum Entfernen vorgemerkt"
++
++#: modules/browser/contents/ui/main.qml:159
++#, kde-format
++msgid "Choose at least one browser to continue."
++msgstr "Wähle mindestens einen Browser aus, um fortzufahren."
++
++#: modules/browserutil/browserutil.cpp:422
++#, kde-format
++msgctxt "%1 is a browser, %2 the error"
++msgid "Couldn't remove %1: %2"
++msgstr "%1 konnte nicht entfernt werden: %2"
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Passen Sie die Größe der Elemente auf dem Bildschirm an."
+ 
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index 7ccbdd8..dc1aacc 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -447,12 +447,12 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+         return makeErrorReply(QStringLiteral("Error copying file to temporary location: ") + QString::fromStdString(e.what()));
+     }
+ 
+-    // The wallpaper picked on the wallpaper page, if it was shown
+-    std::unique_ptr<QTemporaryFile> wallpaperFile;
+-    const QString wallpaperSourcePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config/plasma-setuprc");
+-    if (QFile::exists(wallpaperSourcePath)) {
++    // What was picked on the wallpaper and browser pages, if they were shown
++    std::unique_ptr<QTemporaryFile> setupFile;
++    const QString setupSourcePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config/plasma-setuprc");
++    if (QFile::exists(setupSourcePath)) {
+         try {
+-            wallpaperFile = copyToTempFile(wallpaperSourcePath);
++            setupFile = copyToTempFile(setupSourcePath);
+         } catch (const std::runtime_error &e) {
+             return makeErrorReply(QStringLiteral("Error copying file to temporary location: ") + QString::fromStdString(e.what()));
+         }
+@@ -528,8 +528,8 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+         // Put the picked wallpaper on the desktop containment(s) of the layout
+         // /etc/skel gave the new user. Only installed wallpapers, the setup
+         // user can write anything into its config
+-        const QString wallpaper = wallpaperFile
+-            ? QDir::cleanPath(KConfig(wallpaperFile->fileName(), KConfig::SimpleConfig).group(QStringLiteral("Wallpaper")).readEntry("Image"))
++        const QString wallpaper = setupFile
++            ? QDir::cleanPath(KConfig(setupFile->fileName(), KConfig::SimpleConfig).group(QStringLiteral("Wallpaper")).readEntry("Image"))
+             : QString();
+         const QString appletsPath = QDir::cleanPath(configDirPath + QStringLiteral("/plasma-org.kde.plasma.desktop-appletsrc"));
+         if (wallpaper.startsWith(QLatin1String("/usr/share/wallpapers/")) && QFileInfo(wallpaper).isDir() && QFile::exists(appletsPath)) {
+@@ -552,6 +552,26 @@ ActionReply PlasmaSetupAuthHelper::setnewuserglobaltheme(const QVariantMap &args
+             }
+         }
+ 
++        // Make the browser picked on the browser page the default. Only an
++        // installed Flatpak, the setup user can write anything into its config
++        static const QRegularExpression appId(QStringLiteral("^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)+$"));
++        const QString browser =
++            setupFile ? KConfig(setupFile->fileName(), KConfig::SimpleConfig).group(QStringLiteral("Browser")).readEntry("Default") : QString();
++        const QString browserDesktopFile = browser + QStringLiteral(".desktop");
++        if (appId.match(browser).hasMatch() && QFile::exists(QStringLiteral("/var/lib/flatpak/exports/share/applications/") + browserDesktopFile)) {
++            const QString mimeAppsPath = QDir::cleanPath(configDirPath + QStringLiteral("/mimeapps.list"));
++            KConfig mimeApps(mimeAppsPath, KConfig::SimpleConfig);
++            KConfigGroup defaults = mimeApps.group(QStringLiteral("Default Applications"));
++            for (const char *mimeType : {"x-scheme-handler/http", "x-scheme-handler/https", "text/html", "application/xhtml+xml"}) {
++                defaults.writeEntry(mimeType, browserDesktopFile);
++            }
++            KConfig globals(destFilePath, KConfig::SimpleConfig);
++            globals.group(QStringLiteral("General")).writeEntry("BrowserApplication", browserDesktopFile);
++            if (!mimeApps.sync() || !globals.sync()) {
++                return makeErrorReply(QStringLiteral("Unable to write the default browser to ") + configDirPath);
++            }
++        }
++
+         return ActionReply::SuccessReply();
+     } catch (const std::runtime_error &e) {
+         return makeErrorReply(QStringLiteral("Failed to drop privileges: ") + QString::fromStdString(e.what()));

@@ -1,0 +1,673 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 01:17:28 +0200
+Subject: [PATCH 04/10] Use the BlossomOS Recovery look
+
+The wallpaper landing page becomes Recovery's animated glow backdrop,
+with a light variant that follows the colours the app actually uses, and
+the step card becomes Recovery's window with its layered shadow. Headings
+in Lora, the BlossomOS mark and name on the landing page, and the
+BlossomUI Qt Quick style.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ po/de/org.kde.plasmasetup.po      |   6 +++
+ src/CMakeLists.txt                |   7 +++
+ src/assets/blossomos-symbolic.svg |   8 +++
+ src/assets/bluenoise.png          | Bin 0 -> 4228 bytes
+ src/glowprovider.cpp              |  76 +++++++++++++++++++++++++++
+ src/glowprovider.h                |  29 +++++++++++
+ src/main.cpp                      |   4 +-
+ src/qml/Backdrop.qml              |  72 ++++++++++++++++++++++++++
+ src/qml/BlossomWindow.qml         |  59 +++++++++++++++++++++
+ src/qml/LandingComponent.qml      |  83 ++++++++----------------------
+ src/qml/Wizard.qml                |  21 +++-----
+ 11 files changed, 289 insertions(+), 76 deletions(-)
+ create mode 100644 src/assets/blossomos-symbolic.svg
+ create mode 100644 src/assets/bluenoise.png
+ create mode 100644 src/glowprovider.cpp
+ create mode 100644 src/glowprovider.h
+ create mode 100644 src/qml/Backdrop.qml
+ create mode 100644 src/qml/BlossomWindow.qml
+
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index a5f7ef7..47c864b 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -356,6 +356,12 @@ msgstr "Willkommen bei<br/><b>Plasma Mobile</b>"
+ msgid "Welcome to<br/><b>Plasma Desktop</b>"
+ msgstr "Willkommen bei<br/><b>Plasma Desktop</b>"
+ 
++#: src/qml/LandingComponent.qml
++#, kde-format
++msgctxt "%1 is the distro name"
++msgid "Welcome to<br/><b>%1</b>"
++msgstr "Willkommen bei<br/><b>%1</b>"
++
+ #: src/qml/LandingComponent.qml:140
+ #, kde-format
+ msgid "Begin Setup"
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 4635d1c..6246f8f 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -27,6 +27,8 @@ add_executable(plasma-setup
+     initialstartutil.h
+     keyboardutil.cpp
+     keyboardutil.h
++    glowprovider.cpp
++    glowprovider.h
+     ${plasmasetup_DBUS_SRCS}
+     ${logging_SRCS}
+ )
+@@ -44,6 +46,11 @@ qt_target_qml_sources(plasma-setup
+         qml/SessionMenu.qml
+         qml/Wizard.qml
+         qml/LandingComponent.qml
++        qml/Backdrop.qml
++        qml/BlossomWindow.qml
++    RESOURCES
++        assets/bluenoise.png
++        assets/blossomos-symbolic.svg
+ )
+ 
+ target_link_libraries(plasma-setup
+diff --git a/src/assets/blossomos-symbolic.svg b/src/assets/blossomos-symbolic.svg
+new file mode 100644
+index 0000000..6dd40bc
+--- /dev/null
++++ b/src/assets/blossomos-symbolic.svg
+@@ -0,0 +1,8 @@
++<svg width="272" height="272" viewBox="0 0 272 272" fill="none" xmlns="http://www.w3.org/2000/svg">
++<rect x="4" y="4" width="264" height="264" rx="132" stroke="white" stroke-width="8"/>
++<path fill-rule="evenodd" clip-rule="evenodd" d="M204.39 190.682C213.927 180.707 209.193 160.408 193.817 145.342C179.281 131.1 156.846 126.992 146.505 135C146.048 135.354 146.287 136.06 146.858 136.125C157.181 137.304 167.214 143.278 173.843 153.346C182.239 166.098 182.891 181.949 176.741 194.151C176.552 194.525 176.737 194.985 177.137 195.099C186.659 197.803 199.039 196.278 204.39 190.682Z" fill="white"/>
++<path fill-rule="evenodd" clip-rule="evenodd" d="M109.224 221.647C121.66 227.212 138.924 215.575 147.783 195.654C156.159 176.82 152.493 154.034 141.61 147.015C141.127 146.703 140.552 147.161 140.681 147.722C143.038 157.962 140.839 169.616 133.698 179.468C124.659 191.939 110.16 198.13 96.7838 196.567C96.3735 196.519 96.0126 196.845 96.0397 197.258C96.6976 207.27 102.241 218.522 109.224 221.647Z" fill="white"/>
++<path fill-rule="evenodd" clip-rule="evenodd" d="M48.006 141.38C46.9764 155.161 63.5304 167.48 84.9802 168.895C105.257 170.233 125.197 158.736 128.098 145.923C128.226 145.357 127.591 144.978 127.108 145.301C118.385 151.13 106.841 153.131 95.3248 149.811C80.7364 145.605 70.1617 134.002 67.1597 120.738C67.0676 120.331 66.6309 120.103 66.2491 120.277C57.1766 124.429 48.5836 133.649 48.006 141.38Z" fill="white"/>
++<path fill-rule="evenodd" clip-rule="evenodd" d="M108.409 53.9788C94.9968 56.6706 87.3375 76.1614 91.302 97.5127C95.0501 117.699 110.971 134.109 123.924 133.504C124.499 133.477 124.711 132.766 124.285 132.383C116.549 125.42 111.77 114.664 112.087 102.505C112.487 87.1114 120.946 73.6574 132.869 67.1634C133.234 66.9642 133.347 66.4855 133.089 66.1636C126.879 58.4017 115.938 52.4678 108.409 53.9788Z" fill="white"/>
++<path fill-rule="evenodd" clip-rule="evenodd" d="M204.629 83.4915C197.666 71.6836 177.033 71.2774 158.544 82.5843C141.064 93.274 131.139 114.21 136.013 126.317C136.229 126.853 136.961 126.802 137.175 126.261C141.06 116.447 149.448 108.106 160.832 104.117C175.247 99.0647 190.545 102.362 200.539 111.41C200.846 111.687 201.329 111.624 201.542 111.265C206.675 102.618 208.537 90.1188 204.629 83.4915Z" fill="white"/>
++</svg>
+diff --git a/src/assets/bluenoise.png b/src/assets/bluenoise.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..296b957fd6e53c944fb31a8062019613d7498ef4
+GIT binary patch
+literal 4228
+zcmV-~5PR>5P)<h;3K|Lk000e1NJLTq002M$002M;00000j{+_N000n6Nkl<Zc-jF#
+z5WnvLdzeth_nbx;@CTo~c-5%Mc4Dv+@+PVqHEq6!K#?=EApg58Ly7m8(p`t1A7$4V
+zU%VhW{R}T^f!hbdb)eDa0Ie?HTzI|ajBiW+VJe3VnM@n%H<n0w(^kt4u42+vbKOi}
+z<e|Ve-$ok9IKC^C#_FC)$XueflOjT3;wKMlM*zACiXT1%Gs>tT#E($oX+gr?fTUc*
+z2#@e3N|^c?ynv+;lx+-FBY3oG<9w_CLxllz-4lxDP43gLnua#*ksAQ~XX(<clw?)l
+zemV)xvh^dk08=Z~_h>(|f!%j5=LyI<DD{2K>Z<^eEb<9ZZWFavGk&orX9YNN5cpBH
+z)?LW}Q!}DUfcw`FEVk*H88lmYlKO6nAGQ(Tp<V$yrD%;u?9;RyJ!6FY&ssr?)0*G#
+zB+~SlLCm~`SjRAW1EfEJ0GxHh4<~N9L!oq7YVd=j6VN=W>_(e(GZ)3~y3bJ}op4);
+zP{W%rOS+;J!Y5xhr;lh)3F3D99;D?Kzi#y<4FKL9^Rijy8;bJ-%R#K#N#!kLzX^WJ
+zRQrfbZXJX1vfmXkrw8-c5pf^ecI~eOfJn+3z@c3*tB^%ymD@^;uFn96Lt>FT#+y#j
+zfgisr4|2qvPZ-@d<|dV|*(;V@1vbQc`o3u<khAAuIh09i=DQGe{5ppd*H8e?^f@0~
+z=Pzggxa<Jcehn~auQvFUQj7freDjWLqF%cOW<ckt{zZ&q43$dactKWz$_o31G0mS^
+z*(<K<xoz)!D6WIKpa#TH05_T{srhi+>l9wsq-eM|T(2U`w@4lFfyo$o54Up7rPw?k
+zuFwPSs4JYfAypXlJ(hlCN+g#%!C4J&)<S*%5dh+P%Tq+Rp(Kz(b`9kn)0sl!GItD&
+z)lW5_(^4<t87NomhFzXD!W&KCXVa{UaR|j7;R?@$7~P%fG4~mhr*QzY6=ffa2wH#1
+zx$Z7V$Zzh16j<5+r7du?_l{z}f}8lYb;uI_XpD99J$wS}MccMc@s6Wd{i<a~j>l4D
+z&?i~|)sXhU=g&C(Pyw2TSg8ppzG|wLJ!8M)14JL~2t7?`05O<PDY)HP5Rt`QHJB%2
+zr!Z|m$S-scxgvQ8usiWc01BW!FKd?)sAk|HvHN?I-AwiZ$0L9jTA7B&Z>`YjjKW0d
+z)PV{?p|aN{rn`3ig%Q!bdIaN9@;Kb3<%z<79ss-Egif(`)+)U}an&;tK4GCXiRMPo
+z@2e@<H&>q{cNE{Q9d4=i#vC$f_)Hnf2I4$i_ZyqBi^Z5%YAq9*=xqR0Bw_>X8%Oec
+zj}>3T>A2E$9<ozylnQi8{Im=4lP_PQdssP>VM}=9i4K70Yf_%FjV0J)MJW}30@D3V
+zUNx!!jmr9^!--v<2F>-NPb7>6@WOo%`nWd3gJBhYN8H6c{0_YD1|{p4&Q`xap)%8Z
+z73xi<h3(I7_P#)~cgzIz06`FWF4{V^<54lKLW6CcS4S`5r6*<GALymhyk{D)QPhen
+z%G`ywI{~XI@R773MQFh`bO^dST%RS48l&JSaR9R8N}6d4B!a<a9^ni5*{v3qTg^d*
+zP?`ZhkTUj%as!xTNOYc3XBYl*V%7^<`rVbz5dT)&8ms0_WAKAIl)nI9gC5ORlK*fI
+z?Ur@NEIVh(^l^?1)U5Mdaw1gYp(yOO7xk?XG1a5JM2j8Ab%q41Du1+^FOYo?*fO{b
+zSk)K+{4%NWxZXph&o{JLhqxT*fCDzQ>>7D4$=j~M2tr-RHQ|9j!RL>9Bi@_qNiMxT
+zSMOp&$!hdL#d4O*Z0Jm$0L5)S0(BHCUx`iI07lf3QKY^jPM>SOM~o5we3jLyc~6le
+zZC(gU@>w(yeXeTsqZr_eAOYx5Be4bhMI^0x2LRZS=}(8nt?(F}CH$si4|qTR(qG*>
+z`3I+FIZYI7ANmg1qt5)X9K~+Xw^ZT?k<oKYoz!=`pNZd8f~6Dliz)zFwH%;i)irwH
+zyKa3m@5ACNZHx(mCX`s?gDB^;@P<3RSOhSLnmmK23i>^uB49Mb4Y2wxS`;{F!7N_U
+zIJ-sw4}RY#`$w1sRzAxWv6&%Uw3`*J#_6;k(Yv0^VK2m-Ww7aWPTnc)V3jM0#@R-L
+z>n3MDhU2Er_!*Doahu_20QIRly$o@-BKKyH>r_OD1=daSL1s{SHE%>0RgVTq<R^_o
+zz!PN3wHQU_XLb_(rdYU@2gq<n33;kMwg6EY$pDpeQ_YE4=zzng4=vku_{TVX-z=gS
+z+4q?O?t8D>a}j^|9jNhr1yk65yZ}zJlN-)?-cPLVC70Sw?;(Hxh%*2r1f23M8P}dN
+zOVWb73t^>_9J_PQjSZ|~!P6!^{G`fK)ND7;kDzlf^rF!y>0>ZL5cf42V!nzpWyYY-
+zLa$x`>C!}Fvywb&3FKWMojvL(Yg76FTkA-JFi(r1XBt~ExB-`4B}o4~uOC>9I>CY4
+zaKDYBfz?&@4RjS)D{I}r08N3b65`8G{&=m9^=`1w66C8imbN>@Al`EH3*o<ol0NUS
+z;t{&t3&@ym6!NJDo$pjBY3c(&u$<nz>y!+m6abI=G;VwWrY64^LdP>#j7h+S*&2Rn
+zo&K;CLA5PP*6AU1OM;|tR)l2YL)Lg)OCYfg&PBQ)ddw$0he&(&I&}cK*&oG1?_h-5
+zQ|kkM8~t|%WJC2Q&<IkJUdwuzZ3nAh$qV)|&K!~|_yo5y%arA0dH<QH;*V?mUaSJs
+zv{xwrW(rxJw~ie*vXy3|;k=jDFP_L*rR8@w*D0jsRPh#ko-2&KV?gh*!cL!v7yCdf
+z*NQk7T`o!w!x-c<WFF_t0H^eZD(Fqn`En}}(o7~_Ke6!)j!Y81itYl095%YlME%)P
+z7n$F84LN;b>#J&mqrCx6#dOl~m{X&1jli6OMgWyPblneY7M#RD^oMY&6y<IpdfT)u
+zVXACI!uw;7CR(yMap<iiRHEA&&?r+1#~WMovgn5ft~P?%?I%zE2N?jvQnAW5s8@dl
+z<6E~h%lD5{!Z>E?LHQofP_c9jr{9JGmBA23h{b2~jzzxacHBucoN6OL-(<ZVLkr40
+ztZmi+?jizVlkB?NNs%F+4o83jrqqTNnZ|#U5a24A)lBqnAMIp*()$B4ws8lUII)rJ
+zf6x$=R-!8UcU-lUe&1a(0F9%6{X=sgFsx_5c<bC}y)H`sC9VTjHlg)fJ%1H4xI)aM
+zDO)?2<04q6{ACg&V5uy;_I<_<jnJm_Xc8m0cK{aTzA4WQjPlJD{Vi3OJRR(kU3cVc
+z*S&Ly1-$6SV4B=d4e_~jsY`*@#w~`-Lih)B<VhOXY)(1=E=<vx`A7g-IcZMcpI>`Y
+zJBQT<tI2Y-3ZlzJFY!tv&8%u5im3*6gfx)f7tRm$J{fmV*_Xgoi#uYfF}LfR;lYaQ
+zHwDK4)U=iptu@C1=cRDAU?us4RN*$e6ON}DW9>9X{!!s5`N6MdB2<WMvtpm{whV0H
+z9<$a0mHvexUV9dDs#JlX0CNiNg>U&rw<nnqOX!e96wzrRg7sQ@w%?e236pZoKUy2u
+zN1y(`Fq7o~j5;Z#d^7K!$#_>l39rpXCc0(kD**UHBf(W1kJ@R(_cYLZp)&B8Ox&La
+z)IJVX!`8Ae5SXTI3g>z{2iHd?Rm0w1{YVsOPAL}Uz}jl>q4o~k9E<>@V%Rd~s1AQW
+zSBf9H3TDKv0CYUYEo=OUD5V@>>b-sP(v2*}tY7Yar_XR1gs;(&zlQX1p^Gk1k2PDA
+zKf+A_%zw9;cgtb)um{$4s88e=T#5R%Q<JL6Nab(yLWNZ!N;b7t6_;=xxDxo6OT7g?
+z>kX_p(?<`h9mNHJ(QB^(0P<KD2unI7;4hc&UON7h*FnH14&WYO6nVNhkPF?d$OL5T
+zg!ax%;E6wGG2$bjbW_@0A-QDfefV+Yw=Dm7HvlMz>1h3<k-l$77RZGva2|i?rfq)o
+zH0zrJTFsy<YWb6*b|OFnq%B#>2(EkfW5z6-fBFiO$UIq`NFb(C7@GjzKCQxh)f7;J
+zt>T~rwarVNF;~+?v5HR8tReeHc@aI}7QohDki7eMp6rlU)i;S7<3etvQYF-~6WnF$
+zj?}vVZ%~#XEnDsZ(IGWcY3&lL_h%Q!mIuLcE#rY>z}JbmS~E?l<ZL$(*(1P47z?HG
+zumjJ+GwpW)iZQ~2203940PV*G+C+=CYMl6b!j0NoJH7*m@;N2jWe$=&vl&sQ@Ndk9
+z3@Pz|uu*9_hPBIfO=y-^g%hsYVEk>DLCW=fqyR94W#)FMG|53==^8^VfR=REP@{NS
+z{-{On%5yU00VbCl|D3l+9nqNq-uYnXDLuXaBIQYtJD^OtCf`-AB1r)G6tkTf`wQGC
+zl?b|~`U=b@>KwJ;5{0@Ppjip^nr1|N+BsBs$c|m>s&X%#9g*4*d@r_S_8!a@><f3D
+z6TXlDTg*IG!%J_4RkL%@PHf_^NsnSKLYvT1d@9<Gg3zwS>|m+{XW<h*CVfZ@!%>3n
+zU8vP^1;Kn+s)EvAG~{d80I4K?@+^|O?GoiOhaaC>6gIqa@5XBaH}}G6Ng_E_4=#(p
+z)9^5)x%|qFv)65`1V^1Zi{6_o<~Wl_wEKua004CAjtAIaAf-f|W7s|N#ebUo38#xC
+z=aR4u;-|d)b={y9LnM_>glrB}<P|^oGsV#x_fru=vv3IWXBjHQQknoWxkziR%sP0-
+z{{p{~4KHTSQq~q+OxSZ^KzbKm2a&T(`G9e;2=v&TG-sq+BbIhzxF~GI@Lks-y2_+`
+z4DZtbWf|R{4}tR+TPlD{;dZF#A%{MCy7sCZ%P#Sq&E+&|Aj@0mHpO2=AH90;hq>bm
+zjp}}_k{E-bPl`X@S(36K0LlJYKISh{+OC&uvl>{uMggzoDV#J0gP2aWi6=#Z^17J|
+z+@=|PlIhL~EYuf8R@pU60N^{#F8+1`G52gqgaD%ii^Oo2xrhqwHq-MaiurGqU&!rg
+zM8Emo30HE!sQ_axK!{V+DztDtt4*74{;(3F$@*4ksSe~}p3bZj={W#Vc`2|H`XXjV
+z$q=DpKAg}q+!{&_jMG^pYd6vE8`n<YdiTC-o&5w?jrL*4fH}d2By*M=e7#AK#2r+E
+zC)l<C<dpGBUer6L=5<ko#07d5Pql%kcHW{Ed#jHSnqN7Nq8G0u4M{o1+!iI_0;U~l
+zTkS)+G1~PdZaD6_M4EFA0KaA%%%OV#z>pmHE8MK-zG?6z!~ZTkx9P`2{keWA>TbkU
+z?~~_(qh)=&lu9u3+ndb>=3$_S1hU|J3)J&oF#xAQ+ck*nRNOIKwUum0T8;^yKvn}}
+zluZU-EOk++$`M7>HF#djAh<B<KXK2riwsXJfv*-(KhIg0EoF@s$A<v;1#q(wC~2>N
+z(LfUH9yt3f*@@0^yy1lQp4uMc1@mQ^h6AeE6K_!nsre38=y^S<_H2>Xc){`-s7w8^
+aJXIoZMEGhTqBMj60000<MNUMnLSTXhUkC00
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/glowprovider.cpp b/src/glowprovider.cpp
+new file mode 100644
+index 0000000..1a848ae
+--- /dev/null
++++ b/src/glowprovider.cpp
+@@ -0,0 +1,76 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: AGPL-3.0-or-later
++// Ported from BlossomOS Recovery
++
++#include "glowprovider.h"
++
++#include <QColor>
++
++#include <algorithm>
++#include <cmath>
++
++GlowImageProvider::GlowImageProvider()
++    : QQuickImageProvider(QQuickImageProvider::Image)
++{
++}
++
++QImage GlowImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
++{
++    Q_UNUSED(requestedSize)
++
++    const QStringList parts = id.split(QLatin1Char('/'));
++    const QStringList dims = parts.value(0).split(QLatin1Char('x'));
++    const int width = std::clamp(dims.value(0).toInt(), 1, 8192);
++    const int height = std::clamp(dims.value(1).toInt(), 1, 8192);
++    QColor color(parts.value(1).isEmpty() ? QStringLiteral("#3e78ff") : QLatin1Char('#') + parts.value(1));
++    if (!color.isValid()) {
++        color = QColor(0x3e, 0x78, 0xff);
++    }
++    const float peak = std::clamp(parts.value(2).toFloat(), 0.0f, 1.0f);
++
++    QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
++    if (size) {
++        *size = image.size();
++    }
++
++    const float r = color.redF();
++    const float g = color.greenF();
++    const float b = color.blueF();
++    const float cx = width / 2.0f;
++    const float cy = height; // centre on the bottom edge
++    const float rx = width / 2.0f;
++    const float ry = height;
++
++    static const QImage noise = QImage(QStringLiteral(":/qt/qml/org/kde/plasmasetup/assets/bluenoise.png")).convertToFormat(QImage::Format_Grayscale8);
++    const int noiseSize = noise.isNull() ? 0 : noise.width();
++    const int shift = parts.value(3).toInt() * 23;
++
++    // Peak dither strength in 8-bit levels (+-2), see the header
++    constexpr float ditherLevels = 4.0f;
++    auto quantise = [](float v255, float n) {
++        return std::clamp(int(std::lround(v255 + n)), 0, 255);
++    };
++
++    for (int y = 0; y < height; ++y) {
++        auto *line = reinterpret_cast<QRgb *>(image.scanLine(y));
++        const uchar *noiseLine = noiseSize ? noise.constScanLine((y + shift) % noiseSize) : nullptr;
++        const float dy = (y + 0.5f - cy) / ry;
++        for (int x = 0; x < width; ++x) {
++            const float dx = (x + 0.5f - cx) / rx;
++            const float d2 = dx * dx + dy * dy;
++            float a = 0.0f;
++            if (d2 < 1.0f) {
++                // Gaussian core, with a tail that reaches exactly zero at the edge
++                const float tail = (1.0f - d2) * (1.0f - d2);
++                a = peak * std::exp(-3.2f * d2) * tail;
++            }
++            const float a255 = a * 255.0f;
++            const float t = noiseLine ? (noiseLine[(x + 2 * shift) % noiseSize] + 0.5f) / 256.0f - 0.5f : 0.0f;
++            const float n = t * std::min(ditherLevels, 2.0f * a255);
++            const int ai = quantise(a255, n);
++            // Same threshold on every channel keeps the colour from tinting
++            line[x] = qRgba(std::min(quantise(r * a255, n), ai), std::min(quantise(g * a255, n), ai), std::min(quantise(b * a255, n), ai), ai);
++        }
++    }
++    return image;
++}
+diff --git a/src/glowprovider.h b/src/glowprovider.h
+new file mode 100644
+index 0000000..57614b6
+--- /dev/null
++++ b/src/glowprovider.h
+@@ -0,0 +1,29 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: AGPL-3.0-or-later
++// Ported from BlossomOS Recovery
++
++#pragma once
++
++#include <QQuickImageProvider>
++
++/*
++ * image://glow/<width>x<height>/<rrggbb>/<peak alpha>/<noise shift>
++ * One soft glow blob: an elliptical falloff centred on the bottom edge of
++ * the image, computed in floating point at the size it is shown at and
++ * quantised to 8 bits through a blue-noise threshold map
++ * (assets/bluenoise.png, tools/make-bluenoise.py).
++ *
++ * A faint, wide gradient on near-black spans only a few dozen levels, and
++ * many panels (6-bit + FRC, near-black crush, 8-bit colour LUTs) merge
++ * neighbouring levels: a +-1 level dither disappears there and the bands
++ * come back. The dither is +-2 levels, which survives that; blue noise has
++ * no low-frequency energy, so even at that strength it reads as a smooth
++ * surface rather than grain. Premultiplied, so it composites directly.
++ */
++class GlowImageProvider : public QQuickImageProvider
++{
++public:
++    GlowImageProvider();
++
++    QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override;
++};
+diff --git a/src/main.cpp b/src/main.cpp
+index 98e2178..f43a67e 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -17,6 +17,7 @@
+ #include <QUrl>
+ 
+ #include "../plasma-setup-version.h"
++#include "glowprovider.h"
+ #include "initialstartutil.h"
+ 
+ using namespace Qt::StringLiterals;
+@@ -28,7 +29,7 @@ int main(int argc, char *argv[])
+     KLocalizedString::setApplicationDomain("org.kde.plasmasetup");
+ 
+     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
+-        QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
++        QQuickStyle::setStyle(QStringLiteral("org.blossomos.style"));
+     }
+ 
+     KAboutData about(QStringLiteral("plasma-setup"),
+@@ -53,6 +54,7 @@ int main(int argc, char *argv[])
+     }
+ 
+     KLocalization::setupLocalizedContext(&engine);
++    engine.addImageProvider(QStringLiteral("glow"), new GlowImageProvider);
+     engine.loadFromModule("org.kde.plasmasetup"_L1, "Main"_L1);
+ 
+     if (engine.rootObjects().isEmpty()) {
+diff --git a/src/qml/Backdrop.qml b/src/qml/Backdrop.qml
+new file mode 100644
+index 0000000..02b010e
+--- /dev/null
++++ b/src/qml/Backdrop.qml
+@@ -0,0 +1,72 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: AGPL-3.0-or-later
++// Ported from BlossomOS Recovery, with a light variant
++
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import QtQuick.Window
++import org.kde.kirigami as Kirigami
++
++Item {
++    id: backdrop
++
++    property bool animated: true
++    readonly property string glowColor: Kirigami.Theme.highlightColor.toString().slice(1, 7)
++    // Follows the colours the app actually got, so the light/dark switch shows here too
++    readonly property bool dark: Kirigami.ColorUtils.brightnessForColor(Kirigami.Theme.backgroundColor) === Kirigami.ColorUtils.Dark
++
++    // Seconds since start
++    property real t: 0
++
++    Kirigami.Theme.colorSet: Kirigami.Theme.Window
++    Kirigami.Theme.inherit: false
++
++    Rectangle {
++        anchors.fill: parent
++        color: backdrop.dark ? "#030307" : "#ededf0"
++        Behavior on color { ColorAnimation { duration: Kirigami.Units.veryLongDuration } }
++    }
++
++    Repeater {
++        model: [
++            { x: 0.50, speed: 0.021, w: 1.30, h: 0.62, alpha: 0.20, phase: 0.0, floor: 0.55 },
++            { x: 0.26, speed: 0.047, w: 0.85, h: 0.58, alpha: 0.24, phase: 1.3, floor: 0.10 },
++            { x: 0.70, speed: 0.037, w: 0.90, h: 0.66, alpha: 0.24, phase: 3.9, floor: 0.10 },
++            { x: 0.48, speed: 0.029, w: 0.70, h: 0.48, alpha: 0.20, phase: 5.0, floor: 0.15 },
++        ]
++
++        Image {
++            id: blob
++            required property var modelData
++            readonly property real a: 2 * Math.PI * modelData.speed * backdrop.t + modelData.phase
++            readonly property real dpr: Screen.devicePixelRatio
++            readonly property int pixelWidth: Math.max(1, Math.round(backdrop.width * modelData.w * dpr))
++            readonly property int pixelHeight: Math.max(1, Math.round(backdrop.height * modelData.h * dpr))
++
++            width: pixelWidth / dpr
++            height: pixelHeight / dpr
++            // Fixed, on whole pixels, so the dither pattern is drawn 1:1
++            x: Math.round((backdrop.width * modelData.x - width / 2) * dpr) / dpr
++            y: backdrop.height - height
++            // Eased between floor and 1
++            opacity: modelData.floor + (1 - modelData.floor) * (0.5 - 0.5 * Math.cos(a))
++
++            required property int index
++            source: backdrop.width > 0
++                ? "image://glow/%1x%2/%3/%4/%5".arg(pixelWidth).arg(pixelHeight).arg(backdrop.glowColor).arg(modelData.alpha).arg(index)
++                : ""
++            sourceSize: Qt.size(pixelWidth, pixelHeight)
++            asynchronous: true
++            smooth: false
++        }
++    }
++
++    NumberAnimation on t {
++        running: backdrop.animated && backdrop.visible
++        from: 0
++        to: 3600
++        duration: 3600 * 1000
++        loops: Animation.Infinite
++    }
++}
+diff --git a/src/qml/BlossomWindow.qml b/src/qml/BlossomWindow.qml
+new file mode 100644
+index 0000000..23bcb4a
+--- /dev/null
++++ b/src/qml/BlossomWindow.qml
+@@ -0,0 +1,59 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: AGPL-3.0-or-later
++// Ported from BlossomOS Recovery
++
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import org.kde.kirigami as Kirigami
++
++Item {
++    id: window
++
++    default property alias content: body.data
++
++    property int radius: 12
++    readonly property color frameColor: Kirigami.Theme.backgroundColor
++    readonly property color outlineColor: Kirigami.ColorUtils.linearInterpolation(frameColor, Kirigami.Theme.textColor, 0.12)
++
++    Kirigami.Theme.colorSet: Kirigami.Theme.Window
++    Kirigami.Theme.inherit: false
++
++    Repeater {
++        model: window.radius > 0 ? 14 : 0
++        Rectangle {
++            required property int index
++            readonly property int spread: index * 2 + 2
++            x: -spread
++            y: -spread + Math.round(spread / 3)
++            width: window.width + spread * 2
++            height: window.height + spread * 2
++            radius: window.radius + spread
++            color: "transparent"
++            border.width: 2
++            border.color: Qt.rgba(0, 0, 0, 0.11 * Math.pow(1 - index / 14, 2))
++        }
++    }
++
++    Rectangle {
++        id: frame
++        anchors.fill: parent
++        radius: window.radius
++        color: window.frameColor
++        clip: true
++
++        Item {
++            id: body
++            anchors.fill: parent
++        }
++    }
++
++    // Outline drawn on top so content never covers it
++    Rectangle {
++        anchors.fill: parent
++        radius: window.radius
++        color: "transparent"
++        border.width: window.radius > 0 ? 1 : 0
++        border.color: window.outlineColor
++    }
++}
+diff --git a/src/qml/LandingComponent.qml b/src/qml/LandingComponent.qml
+index fec30ab..5422212 100644
+--- a/src/qml/LandingComponent.qml
++++ b/src/qml/LandingComponent.qml
+@@ -13,14 +13,9 @@ import org.kde.plasmasetup
+ Item {
+     id: root
+ 
+-    readonly property real scaleStart: 1.4
+-    readonly property real scaleLanding: 1.2
+-    readonly property real scaleSteps: 1
+-
+     signal requestNextPage()
+ 
+     function returnToLanding() {
+-        backgroundImage.scale = scaleLanding;
+         contentOpacityAnim.to = 1;
+         contentOpacityAnim.restart();
+     }
+@@ -36,57 +31,16 @@ Item {
+         onFinished: duration = 200
+     }
+ 
+-    Image {
+-        id: backgroundImage
++    Backdrop {
+         anchors.fill: parent
+ 
+-        readonly property bool isLandscape: width >= height
+-
+-        source: {
+-            const landscapeFile = "5120x2880.png";
+-            const portraitFile  = "1440x2960.png";
+-
+-            const lightFolder = "wallpapers/Next/contents/images/";
+-            const darkFolder  = "wallpapers/Next/contents/images_dark/";
+-            const themedFolder = Prepare.PrepareUtil.usingDarkTheme ? darkFolder : lightFolder;
+-
+-            function locate(file) {
+-                return StandardPaths.locate(StandardPaths.GenericDataLocation, themedFolder + file)
+-                    || StandardPaths.locate(StandardPaths.GenericDataLocation, lightFolder + file);
+-            }
+-
+-            const primary = isLandscape ? landscapeFile : portraitFile;
+-            const secondary = isLandscape ? portraitFile : landscapeFile;
+-
+-            return locate(primary) || locate(secondary) || "";
+-        }
+-        fillMode: Image.PreserveAspectCrop
+-
+         opacity: 0
+-
+         NumberAnimation on opacity {
+             running: true
+             duration: 400
+             to: 1
+             easing.type: Easing.InOutQuad
+         }
+-
+-        // zoom animation
+-        scale: scaleStart
+-        Component.onCompleted: scale = scaleLanding
+-
+-        Behavior on scale {
+-            NumberAnimation {
+-                duration: 2000
+-                easing.type: Easing.OutExpo
+-            }
+-        }
+-
+-        // darken image slightly
+-        Rectangle {
+-            anchors.fill: parent
+-            color: Qt.rgba(0, 0, 0, 0.3)
+-        }
+     }
+ 
+     // split layout decisions into narrow vs short:
+@@ -121,15 +75,13 @@ Item {
+ 
+             Label {
+                 Layout.fillWidth: true
+-                text: Kirigami.Settings.isMobile
+-                    ? i18n("Welcome to<br/><b>Plasma Mobile</b>")
+-                    : i18n("Welcome to<br/><b>Plasma Desktop</b>")
++                text: i18nc("%1 is the distro name", "Welcome to<br/><b>%1</b>", InitialStartUtil.distroName)
+ 
+                 horizontalAlignment: Text.AlignHCenter
+                 wrapMode: Text.Wrap
+ 
+-                font.pointSize: 18
+-                color: "white"
++                font.family: "Lora"
++                font.pointSize: 26
+             }
+ 
+             Button {
+@@ -138,10 +90,9 @@ Item {
+ 
+                 opacity: root.contentOpacity
+                 text: i18n("Begin Setup")
+-                icon.name: "plasma-symbolic"
++                icon.name: "go-next-symbolic"
+ 
+                 onClicked: {
+-                    backgroundImage.scale = scaleSteps;
+                     contentOpacityAnim.to = 0;
+                     contentOpacityAnim.restart();
+                     root.requestNextPage()
+@@ -163,17 +114,25 @@ Item {
+                 ? poweredBy.implicitHeight + Kirigami.Units.smallSpacing + sessionMenu.implicitHeight
+                 : Math.max(poweredBy.implicitHeight, sessionMenu.implicitHeight)
+ 
+-            Kirigami.Heading {
++            RowLayout {
+                 id: poweredBy
+-                width: parent.width
++                x: root.isNarrow ? (parent.width - width) / 2 : 0
+                 y: root.isNarrow ? 0 : (parent.height - height) / 2
++                spacing: Kirigami.Units.largeSpacing
++
++                Kirigami.Icon {
++                    source: "qrc:/qt/qml/org/kde/plasmasetup/assets/blossomos-symbolic.svg"
++                    isMask: true
++                    color: Kirigami.Theme.textColor
++                    Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
++                    Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
++                }
+ 
+-                text: i18nc("%1 is the distro name", "Powered by<br/><b>%1</b>", InitialStartUtil.distroName)
+-                horizontalAlignment: Text.AlignHCenter
+-                wrapMode: Text.Wrap
+-
+-                level: 5
+-                color: "white"
++                Label {
++                    text: InitialStartUtil.distroName
++                    font.family: "Lora"
++                    font.pointSize: Application.font.pointSize * 1.15
++                }
+             }
+ 
+             SessionMenu {
+diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
+index 79fb025..b1a9032 100644
+--- a/src/qml/Wizard.qml
++++ b/src/qml/Wizard.qml
+@@ -196,16 +196,10 @@ Kirigami.Page {
+             y: stepsComponent.translateY
+         }
+ 
+-        Rectangle {
++        BlossomWindow {
+             id: overlaySteps
+ 
+-            Kirigami.Theme.inherit: false
+-            Kirigami.Theme.colorSet: Kirigami.Theme.Window
+-
+-            color: Kirigami.Theme.backgroundColor
+-            clip: true
+-
+-            radius: Kirigami.Settings.isMobile ? 0 : Kirigami.Units.cornerRadius + 8
++            radius: Kirigami.Settings.isMobile ? 0 : 12
+ 
+             anchors {
+                 // On mobile, behave like a full-height page (no floating card)
+@@ -217,8 +211,8 @@ Kirigami.Page {
+                 centerIn: Kirigami.Settings.isMobile ? undefined : parent
+             }
+ 
+-            width: Kirigami.Settings.isMobile ? undefined : parent.width * 0.4
+-            height: Kirigami.Settings.isMobile ? undefined : parent.height * 0.7
++            width: Kirigami.Settings.isMobile ? undefined : Math.min(parent.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 40)
++            height: Kirigami.Settings.isMobile ? undefined : Math.min(parent.height - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 36)
+ 
+             Behavior on height {
+                 NumberAnimation {
+@@ -238,7 +232,8 @@ Kirigami.Page {
+                     id: stepHeading
+                     opacity: 0
+                     horizontalAlignment: Text.AlignHCenter
+-                    font.pointSize: 18
++                    font.family: "Lora"
++                    font.pointSize: 20
+ 
+                     Layout.fillWidth: true
+                     Layout.alignment: Qt.AlignHCenter
+@@ -293,7 +288,7 @@ Kirigami.Page {
+                         Layout.alignment: Qt.AlignLeft
+ 
+                         text: i18nc("@action:button", "Back")
+-                        icon.name: "arrow-left-symbolic"
++                        icon.name: "go-previous-symbolic"
+ 
+                         onClicked: root.requestPreviousPage()
+                     }
+@@ -309,7 +304,7 @@ Kirigami.Page {
+ 
+                         visible: !root.onFinalPage
+                         text: i18nc("@action:button", "Next")
+-                        icon.name: "arrow-right-symbolic"
++                        icon.name: "go-next-symbolic"
+ 
+                         enabled: root.currentModule.nextEnabled
+ 

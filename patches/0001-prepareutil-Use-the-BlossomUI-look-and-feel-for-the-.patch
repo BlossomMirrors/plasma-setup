@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 21 Oct 2026 01:14:27 +0200
+Subject: [PATCH 01/10] prepareutil: Use the BlossomUI look and feel for the
+ light/dark toggle
+
+Applies org.blossomos.ui.{light,dark}.desktop instead of Breeze and
+re-asserts what those packages leave out or get wrong: the Bibata cursor
+at 20px and blossom-sound-theme.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ modules/prepareutil/colorssettings.kcfg |  2 +-
+ modules/prepareutil/prepareutil.cpp     | 32 ++++++++++++++++++++++---
+ 2 files changed, 30 insertions(+), 4 deletions(-)
+
+diff --git a/modules/prepareutil/colorssettings.kcfg b/modules/prepareutil/colorssettings.kcfg
+index b7c7b8e..bc3c7eb 100644
+--- a/modules/prepareutil/colorssettings.kcfg
++++ b/modules/prepareutil/colorssettings.kcfg
+@@ -11,7 +11,7 @@
+   <group name="General">
+     <entry name="colorScheme" key="ColorScheme" type="String">
+       <label>Color scheme name</label>
+-      <default>BreezeLight</default>
++      <default>BlossomUILight</default>
+     </entry>
+     <entry name="accentColor" key="AccentColor" type="Color">
+       <label>Accent color</label>
+diff --git a/modules/prepareutil/prepareutil.cpp b/modules/prepareutil/prepareutil.cpp
+index 7c9d768..f818277 100644
+--- a/modules/prepareutil/prepareutil.cpp
++++ b/modules/prepareutil/prepareutil.cpp
+@@ -8,12 +8,35 @@
+ #include <KScreen/Output>
+ #include <KScreen/SetConfigOperation>
+ 
++#include <KConfigGroup>
++#include <KSharedConfig>
++
+ #include <QDBusPendingCallWatcher>
+ #include <QDBusPendingReply>
+ #include <QProcess>
+ 
+ using namespace Qt::StringLiterals;
+ 
++namespace
++{
++// BlossomOS defaults that the look and feel packages don't carry (cursor size)
++// or carry wrong (they name a sound theme that isn't installed)
++void applyBlossomDefaults(bool dark)
++{
++    auto globals = KSharedConfig::openConfig(u"kdeglobals"_s);
++    // Applying the look and feel can leave the scheme's name out
++    globals->group(u"General"_s).writeEntry("ColorScheme", dark ? u"BlossomUIDark"_s : u"BlossomUILight"_s, KConfig::Notify);
++    globals->group(u"Sounds"_s).writeEntry("Theme", u"blossom-sound-theme"_s, KConfig::Notify);
++    globals->sync();
++
++    auto input = KSharedConfig::openConfig(u"kcminputrc"_s);
++    KConfigGroup mouse = input->group(u"Mouse"_s);
++    mouse.writeEntry("cursorTheme", u"Bibata-Modern-Classic"_s, KConfig::Notify);
++    mouse.writeEntry("cursorSize", 20, KConfig::Notify);
++    input->sync();
++}
++}
++
+ PrepareUtil::PrepareUtil(QObject *parent)
+     : QObject{parent}
+     , m_colorsSettings{new ColorsSettings(this)}
+@@ -36,7 +59,9 @@ PrepareUtil::PrepareUtil(QObject *parent)
+     });
+ 
+     // set property initially
+-    m_usingDarkTheme = m_colorsSettings->colorScheme() == u"BreezeDark"_s;
++    // The colour scheme's name isn't reliable after applying a look and feel,
++    // the look and feel package is
++    m_usingDarkTheme = KSharedConfig::openConfig(u"kdeglobals"_s)->group(u"KDE"_s).readEntry("LookAndFeelPackage") == u"org.blossomos.ui.dark.desktop"_s;
+ }
+ 
+ int PrepareUtil::scaling() const
+@@ -93,10 +118,11 @@ void PrepareUtil::setUsingDarkTheme(bool usingDarkTheme)
+ {
+     // use plasma-apply-lookandfeel since it has logic for notifying the shell of changes
+     if (usingDarkTheme) {
+-        QProcess::execute(u"plasma-apply-lookandfeel"_s, {QStringLiteral("--apply"), QStringLiteral("org.kde.breezedark.desktop")});
++        QProcess::execute(u"plasma-apply-lookandfeel"_s, {QStringLiteral("--apply"), QStringLiteral("org.blossomos.ui.dark.desktop")});
+     } else {
+-        QProcess::execute(u"plasma-apply-lookandfeel"_s, {QStringLiteral("--apply"), QStringLiteral("org.kde.breeze.desktop")});
++        QProcess::execute(u"plasma-apply-lookandfeel"_s, {QStringLiteral("--apply"), QStringLiteral("org.blossomos.ui.light.desktop")});
+     }
++    applyBlossomDefaults(usingDarkTheme);
+ 
+     m_usingDarkTheme = usingDarkTheme;
+     Q_EMIT usingDarkThemeChanged();
