@@ -74,7 +74,12 @@ clean:
 preview *args: build
     scripts/preview {{ args }}
 
-# Screenshot the landing page, or a page with --page NAME, through the preview (args: --dark, --delay MS, WIDTH HEIGHT)
+# Screenshot the landing page, or a page with --page NAME, through the preview (args: [FILE.png], --dark, --delay MS, WIDTH HEIGHT)
 [group('UI')]
-screenshot out="screenshot.png" *args: build
-    scripts/preview --screenshot "{{ out }}" {{ args }}
+screenshot *args: build
+    #!/usr/bin/bash
+    set -euo pipefail
+    set -- {{ args }}
+    out=screenshot.png
+    if [[ ${1:-} == *.png ]]; then out="$1"; shift; fi
+    scripts/preview --screenshot "$out" "$@"
