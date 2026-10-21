@@ -81,5 +81,8 @@ screenshot *args: build
     set -euo pipefail
     set -- {{ args }}
     out=screenshot.png
-    if [[ ${1:-} == *.png ]]; then out="$1"; shift; fi
-    scripts/preview --screenshot "$out" "$@"
+    rest=()
+    for arg; do
+        if [[ $arg == *.png ]]; then out="$arg"; else rest+=("$arg"); fi
+    done
+    scripts/preview --screenshot "$out" "${rest[@]}"

@@ -7,7 +7,7 @@ After the network page, downloads and stages the latest system image
 through rpm-ostree, with the download progress estimated like in
 BlossomOS' Software Update KCM. When the next boot gets a new image,
 it restarts into it right away; setup then starts again. Setup can go
-on once the system is up to date, or when updating failed.
+on, or back, once the system is up to date, or when updating failed.
 
 Without an internet connection the page is skipped. For that, pages
 can now implement skipPage(), which the wizard asks right before their
@@ -21,19 +21,21 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  files/plasma-setup-polkit.rules       |   3 +
  modules/CMakeLists.txt                |   4 +
  modules/updates/CMakeLists.txt        |  12 +
- modules/updates/contents/ui/main.qml  | 157 ++++++++++
+ modules/updates/contents/ui/main.qml  | 159 ++++++++++
  modules/updates/metadata.json         |  21 ++
  modules/updates/metadata.json.license |   2 +
  modules/updatesutil/CMakeLists.txt    |  22 ++
  modules/updatesutil/updatesutil.cpp   | 430 ++++++++++++++++++++++++++
  modules/updatesutil/updatesutil.h     | 125 ++++++++
  po/de/org.kde.plasmasetup.po          |  58 ++++
+ src/components/setupmodule.cpp        |  14 +
+ src/components/setupmodule.h          |   6 +
  src/initialstartutil.cpp              |  14 +
  src/initialstartutil.h                |   6 +
  src/pagesmodel.cpp                    |   5 +
  src/pagesmodel.h                      |   5 +
- src/qml/Wizard.qml                    |   8 +
- 15 files changed, 872 insertions(+)
+ src/qml/Wizard.qml                    |  10 +
+ 17 files changed, 896 insertions(+)
  create mode 100644 modules/updates/CMakeLists.txt
  create mode 100644 modules/updates/contents/ui/main.qml
  create mode 100644 modules/updates/metadata.json
@@ -96,10 +98,10 @@ index 0000000..668bb39
 +ecm_finalize_qml_module(plasmasetup_updates)
 diff --git a/modules/updates/contents/ui/main.qml b/modules/updates/contents/ui/main.qml
 new file mode 100644
-index 0000000..753c15c
+index 0000000..f427921
 --- /dev/null
 +++ b/modules/updates/contents/ui/main.qml
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,159 @@
 +// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -119,8 +121,8 @@ index 0000000..753c15c
 +* @brief Module that installs system updates
 +*
 +* Downloads and stages the latest system image as soon as it is shown, and
-+* restarts into it when there was one. Setup can only go on when the system
-+* is up to date, or the update failed. Skipped without internet.
++* restarts into it when there was one. Setup can only go on, or back, when the
++* system is up to date, or the update failed. Skipped without internet.
 +*/
 +PlasmaSetupComponents.SetupModule {
 +    id: root
@@ -129,6 +131,8 @@ index 0000000..753c15c
 +
 +    available: Updates.UpdatesUtil.available
 +    nextEnabled: updateState === Updates.UpdatesUtil.UpToDate || updateState === Updates.UpdatesUtil.Failed
++    // No leaving while rpm-ostree is at work or the system restarts
++    backEnabled: nextEnabled
 +
 +    function skipPage(): bool {
 +        return !InitialStartUtil.online();
@@ -956,6 +960,66 @@ index 4a75f63..efd9e4d 100644
  #~ msgid "Adjust the size of elements on the screen."
  #~ msgstr "Passen Sie die Größe der Elemente auf dem Bildschirm an."
  
+diff --git a/src/components/setupmodule.cpp b/src/components/setupmodule.cpp
+index a84ccb3..079770b 100644
+--- a/src/components/setupmodule.cpp
++++ b/src/components/setupmodule.cpp
+@@ -23,6 +23,20 @@ void SetupModule::setNextEnabled(bool nextEnabled)
+     Q_EMIT nextEnabledChanged();
+ }
+ 
++bool SetupModule::backEnabled() const
++{
++    return m_backEnabled;
++}
++
++void SetupModule::setBackEnabled(bool backEnabled)
++{
++    if (m_backEnabled == backEnabled) {
++        return;
++    }
++    m_backEnabled = backEnabled;
++    Q_EMIT backEnabledChanged();
++}
++
+ bool SetupModule::available() const
+ {
+     return m_available;
+diff --git a/src/components/setupmodule.h b/src/components/setupmodule.h
+index 95adf9e..d18ad3d 100644
+--- a/src/components/setupmodule.h
++++ b/src/components/setupmodule.h
+@@ -17,6 +17,7 @@ class SetupModule : public QObject
+     Q_PROPERTY(bool available READ available WRITE setAvailable NOTIFY availableChanged)
+     Q_PROPERTY(qreal cardWidth READ cardWidth WRITE setCardWidth NOTIFY cardWidthChanged)
+     Q_PROPERTY(bool nextEnabled READ nextEnabled WRITE setNextEnabled NOTIFY nextEnabledChanged)
++    Q_PROPERTY(bool backEnabled READ backEnabled WRITE setBackEnabled NOTIFY backEnabledChanged)
+     Q_PROPERTY(QQuickItem *contentItem READ contentItem WRITE setContentItem REQUIRED NOTIFY contentItemChanged)
+     Q_PROPERTY(QQmlListProperty<QObject> children READ children CONSTANT)
+     Q_CLASSINFO("DefaultProperty", "children")
+@@ -36,17 +37,22 @@ public:
+     [[nodiscard]] bool nextEnabled() const;
+     void setNextEnabled(bool nextEnabled);
+ 
++    [[nodiscard]] bool backEnabled() const;
++    void setBackEnabled(bool backEnabled);
++
+     [[nodiscard]] QQmlListProperty<QObject> children();
+ 
+ Q_SIGNALS:
+     void availableChanged();
+     void contentItemChanged();
+     void nextEnabledChanged();
++    void backEnabledChanged();
+     void cardWidthChanged();
+ 
+ private:
+     bool m_available{true};
+     bool m_nextEnabled = true;
++    bool m_backEnabled = true;
+     QQuickItem *m_contentItem{nullptr};
+     QList<QObject *> m_children;
+     qreal m_cardWidth;
 diff --git a/src/initialstartutil.cpp b/src/initialstartutil.cpp
 index 22a2f3d..a9d337d 100644
 --- a/src/initialstartutil.cpp
@@ -1038,7 +1102,7 @@ index fcda49b..e024298 100644
      void loaded();
  
 diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
-index f639eae..8d9261c 100644
+index f639eae..6a9f11b 100644
 --- a/src/qml/Wizard.qml
 +++ b/src/qml/Wizard.qml
 @@ -82,6 +82,14 @@ Kirigami.Page {
@@ -1056,3 +1120,12 @@ index f639eae..8d9261c 100644
          previousStepItemX = 0;
  
          // Notify the next page/module it is being activated.
+@@ -307,6 +315,8 @@ Kirigami.Page {
+                         text: i18nc("@action:button", "Back")
+                         icon.name: "go-previous-symbolic"
+ 
++                        enabled: root.currentModule.backEnabled
++
+                         onClicked: root.requestPreviousPage()
+                     }
+ 
