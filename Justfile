@@ -2,6 +2,7 @@ fedora := env("FEDORA_VERSION", "44")
 src_dir := "build/src"
 cmake_dir := "build/cmake"
 stage_dir := "build/stage"
+toolbox := "plasma-setup"
 just := just_executable()
 
 [private]
@@ -45,12 +46,16 @@ export-patches:
     git -C {{ src_dir }} format-patch -q --no-signature --zero-commit -o ../../patches upstream..HEAD
     ls patches
 
-# Build build/src and install it into build/stage
+# Build build/src and install it into build/stage, in the toolbox when run from the host
 [group('Build')]
 build:
     #!/usr/bin/bash
     set -euo pipefail
     [[ -d {{ src_dir }} ]] || {{ just }} source
+    if [[ ! -e /run/.containerenv ]]; then
+        podman container exists {{ toolbox }} || {{ just }} toolbox
+        exec toolbox run -c {{ toolbox }} just build
+    fi
     [[ -f {{ cmake_dir }}/build.ninja ]] || cmake -B {{ cmake_dir }} -S {{ src_dir }} -GNinja \
         -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBEXECDIR=libexec \
         -DKDE_INSTALL_USE_QT_SYS_PATHS=ON -DBUILD_TESTING=OFF
@@ -58,6 +63,16 @@ build:
     rm -rf {{ stage_dir }}
     DESTDIR="$PWD/{{ stage_dir }}" cmake --install {{ cmake_dir }} >/dev/null
     install -Dm644 wallpapers.json {{ stage_dir }}/usr/share/plasma-setup/wallpapers.json
+
+# Create the Fedora toolbox 'just build' runs in, or bring its build dependencies up to date
+[group('Build')]
+toolbox:
+    #!/usr/bin/bash
+    set -euo pipefail
+    srpm=$(./build.sh --fetch {{ fedora }})
+    podman container exists {{ toolbox }} || toolbox create -y -c {{ toolbox }} --distro fedora --release {{ fedora }}
+    toolbox run -c {{ toolbox }} sudo dnf -y -q install just cmake ninja-build gcc-c++ dnf-plugins-core
+    toolbox run -c {{ toolbox }} sudo dnf -y -q builddep "$srpm"
 
 # Build the patched plasma-setup RPM (build/rpmbuild/RPMS/)
 [group('Build')]

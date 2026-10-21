@@ -15,7 +15,7 @@ Fedora's `plasma-setup` package with the patches in `patches/` on top. Fedora's 
 
 | Updates page (dark) | Web browser page |
 |---|---|
-| ![The updates page downloading a new system image](screenshots/updates.png) | ![The web browser page with a list of browsers to install](screenshots/browser.png) |
+| ![The updates page downloading a new system image](screenshots/updates.png) | ![The web browser page with a list of browsers to choose from](screenshots/browser.png) |
 
 ## Usage
 
@@ -81,4 +81,4 @@ The upstream tree installs a clang-format pre-commit hook. Run `git clang-format
 | 0007 | German: du | The German translation addresses the user with du instead of Sie, including the account page title ("Über dich"). |
 | 0008 | Wallpaper page | A page after the theme switch that offers the wallpapers in `wallpapers.json` as thumbnails, in their dark variant in dark mode. The pick goes on the new user's desktop along with the theme. |
 | 0009 | Updates page | After the network page: downloads and stages the latest system image through rpm-ostree, with progress, and restarts right away when there was one (setup then starts again). Setup goes on once up to date, or when updating failed. Skipped without internet: pages can now skip themselves with `skipPage()`. The setup user may upgrade and restart without a password. |
-| 0010 | Web browser page | After the updates page: offers the browsers on the Forge browser list (the one the Arc Store shows). Ticked ones are installed and unticked ones removed right away, as system-wide Flatpaks; setup only goes on with at least one. One installed browser becomes the new user's default (`mimeapps.list`, kdeglobals). Skipped without internet. The setup user may install Flatpak apps and runtimes, and remove apps, without a password. |
+| 0010 | Web browser page | After the updates page: offers the browsers on the Forge browser list (the one the Arc Store shows) as radio buttons. The chosen one is installed right away as a system-wide Flatpak and becomes the new user's default (`mimeapps.list`, kdeglobals), then the others on the list are removed; setup only goes on with one chosen. Skipped without internet. The setup user may install Flatpak apps and runtimes, and remove apps, without a password. |

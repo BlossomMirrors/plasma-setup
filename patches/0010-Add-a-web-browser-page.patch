@@ -4,12 +4,14 @@ Date: Wed, 21 Oct 2026 05:19:33 +0200
 Subject: [PATCH 10/10] Add a web browser page
 
 After the updates page, offers the browsers on the Forge browser list
-(the one the Arc Store shows). Ticked ones are installed and unticked
-ones removed right away, one after another, as system-wide Flatpaks
+(the one the Arc Store shows) as radio buttons. The chosen one is
+installed right away and becomes the new user's default browser in
+mimeapps.list and kdeglobals, then the other browsers on the list are
+removed, one after another. They are system-wide Flatpaks, installed
 through libflatpak, since the setup user's home doesn't survive setup.
-Setup only goes on with at least one browser. One of the installed
-ones, the first by default, becomes the new user's default browser in
-mimeapps.list and kdeglobals.
+If the chosen browser can't be installed, the others are kept. Setup
+only goes on with a browser chosen; with exactly one installed already,
+that one is.
 
 Like the updates page, it is skipped without an internet connection.
 The setup user may install Flatpak apps and runtimes, and remove apps,
@@ -21,15 +23,15 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  files/plasma-setup-polkit.rules       |   3 +
  modules/CMakeLists.txt                |   4 +
  modules/browser/CMakeLists.txt        |  12 +
- modules/browser/contents/ui/main.qml  | 182 +++++++++++
+ modules/browser/contents/ui/main.qml  | 162 +++++++++
  modules/browser/metadata.json         |  21 ++
  modules/browser/metadata.json.license |   2 +
  modules/browserutil/CMakeLists.txt    |  27 ++
- modules/browserutil/browserutil.cpp   | 453 ++++++++++++++++++++++++++
- modules/browserutil/browserutil.h     | 112 +++++++
- po/de/org.kde.plasmasetup.po          |  57 ++++
+ modules/browserutil/browserutil.cpp   | 470 ++++++++++++++++++++++++++
+ modules/browserutil/browserutil.h     | 109 ++++++
+ po/de/org.kde.plasmasetup.po          |  52 +++
  src/auth/authhelper.cpp               |  34 +-
- 11 files changed, 900 insertions(+), 7 deletions(-)
+ 11 files changed, 889 insertions(+), 7 deletions(-)
  create mode 100644 modules/browser/CMakeLists.txt
  create mode 100644 modules/browser/contents/ui/main.qml
  create mode 100644 modules/browser/metadata.json
@@ -39,16 +41,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 modules/browserutil/browserutil.h
 
 diff --git a/files/plasma-setup-polkit.rules b/files/plasma-setup-polkit.rules
-index cabae84..6ce927a 100644
+index cabae84..c35ffce 100644
 --- a/files/plasma-setup-polkit.rules
 +++ b/files/plasma-setup-polkit.rules
 @@ -35,6 +35,9 @@ polkit.addRule(function (action, subject) {
          "org.projectatomic.rpmostree1.upgrade", // Download and stage system updates
          "org.freedesktop.login1.reboot", // Restart into the update
          "org.freedesktop.login1.reboot-multiple-sessions", // Restart into the update with other sessions open
-+        "org.freedesktop.Flatpak.app-install", // Install the browsers picked, system-wide
++        "org.freedesktop.Flatpak.app-install", // Install the browser chosen, system-wide
 +        "org.freedesktop.Flatpak.runtime-install", // ...and the runtimes they need
-+        "org.freedesktop.Flatpak.app-uninstall", // Remove the browsers unticked
++        "org.freedesktop.Flatpak.app-uninstall", // Remove the other browsers
      ];
  
      // Check if the current action is in our allowed list.
@@ -94,10 +96,10 @@ index 0000000..d359c0a
 +ecm_finalize_qml_module(plasmasetup_browser)
 diff --git a/modules/browser/contents/ui/main.qml b/modules/browser/contents/ui/main.qml
 new file mode 100644
-index 0000000..0f4ba5a
+index 0000000..6f477a3
 --- /dev/null
 +++ b/modules/browser/contents/ui/main.qml
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,162 @@
 +// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -117,9 +119,9 @@ index 0000000..0f4ba5a
 +* @brief Module for choosing web browsers
 +*
 +* Offers the browsers on the Forge browser list, the one the Arc Store
-+* shows. Ticked browsers are installed right away and unticked ones removed,
-+* one after another, and one of the installed ones becomes the new user's
-+* default. Setup needs at least one. Skipped without internet.
++* shows. The chosen browser is installed right away and becomes the new
++* user's default, then the others are removed. Setup needs one. Skipped
++* without internet.
 +*/
 +PlasmaSetupComponents.SetupModule {
 +    id: root
@@ -147,7 +149,7 @@ index 0000000..0f4ba5a
 +
 +            wrapMode: Text.Wrap
 +            horizontalAlignment: Text.AlignHCenter
-+            text: i18n("Choose the web browsers you want. You can install more later in the Arc Store.")
++            text: i18n("Choose the web browser you want. You can install more later in the Arc Store.")
 +        }
 +
 +        BusyIndicator {
@@ -186,24 +188,24 @@ index 0000000..0f4ba5a
 +
 +                    width: ListView.view.width
 +                    text: modelData.name
-+                    // Ticked ones get installed, unticked ones removed
++                    // The chosen one gets installed, the others removed
 +                    onClicked: {
 +                        if (!modelData.working) {
-+                            Browser.BrowserUtil.setWanted(modelData.id, !modelData.wanted);
++                            Browser.BrowserUtil.choose(modelData.id);
 +                        }
 +                    }
 +
-+                    Accessible.role: Accessible.CheckBox
-+                    Accessible.checked: check.checked
++                    Accessible.role: Accessible.RadioButton
++                    Accessible.checked: radio.checked
 +
 +                    contentItem: RowLayout {
 +                        spacing: Kirigami.Units.largeSpacing
 +
-+                        CheckBox {
-+                            id: check
-+                            checked: delegate.modelData.wanted
++                        RadioButton {
++                            id: radio
++                            checked: delegate.modelData.chosen
 +                            enabled: !delegate.modelData.working
-+                            onToggled: Browser.BrowserUtil.setWanted(delegate.modelData.id, checked)
++                            onToggled: Browser.BrowserUtil.choose(delegate.modelData.id)
 +                        }
 +
 +                        Image {
@@ -237,7 +239,7 @@ index 0000000..0f4ba5a
 +                            text: {
 +                                const browser = delegate.modelData;
 +                                if (browser.working) {
-+                                    return browser.wanted ? "" : i18n("Removing…");
++                                    return browser.installed ? i18n("Removing…") : "";
 +                                } else if (browser.pending) {
 +                                    return browser.wanted ? i18n("Waiting…") : i18n("Will be removed");
 +                                }
@@ -256,27 +258,7 @@ index 0000000..0f4ba5a
 +            wrapMode: Text.Wrap
 +            visible: list.count > 0 && !Browser.BrowserUtil.hasBrowser
 +            color: Kirigami.Theme.neutralTextColor
-+            text: i18n("Choose at least one browser to continue.")
-+        }
-+
-+        RowLayout {
-+            Layout.fillWidth: true
-+            Layout.topMargin: Kirigami.Units.largeSpacing
-+            visible: defaultBox.count > 1
-+
-+            Label {
-+                text: i18n("Default browser:")
-+            }
-+
-+            ComboBox {
-+                id: defaultBox
-+                Layout.fillWidth: true
-+                model: Browser.BrowserUtil.browsers.filter(browser => browser.installed)
-+                textRole: "name"
-+                valueRole: "id"
-+                currentIndex: model.findIndex(browser => browser.id === Browser.BrowserUtil.defaultBrowser)
-+                onActivated: Browser.BrowserUtil.defaultBrowser = currentValue
-+            }
++            text: i18n("Choose a browser to continue.")
 +        }
 +    }
 +}
@@ -350,10 +332,10 @@ index 0000000..8ae5547
 +ecm_finalize_qml_module(plasmasetup_browserutil)
 diff --git a/modules/browserutil/browserutil.cpp b/modules/browserutil/browserutil.cpp
 new file mode 100644
-index 0000000..bccb962
+index 0000000..a27b62c
 --- /dev/null
 +++ b/modules/browserutil/browserutil.cpp
-@@ -0,0 +1,453 @@
+@@ -0,0 +1,470 @@
 +// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -581,6 +563,7 @@ index 0000000..bccb962
 +            {u"name"_s, browser.name},
 +            {u"icon"_s, browser.icon},
 +            {u"installed"_s, browser.installed},
++            {u"chosen"_s, browser.id == m_chosen},
 +            {u"wanted"_s, browser.wanted},
 +            {u"working"_s, browser.id == m_current},
 +            {u"pending"_s, browser.wanted != browser.installed && browser.id != m_current},
@@ -608,32 +591,12 @@ index 0000000..bccb962
 +
 +bool BrowserUtil::hasBrowser() const
 +{
-+    return std::any_of(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
-+        return browser.wanted;
-+    });
++    return !m_chosen.isEmpty();
 +}
 +
 +int BrowserUtil::percent() const
 +{
 +    return m_percent;
-+}
-+
-+QString BrowserUtil::defaultBrowser() const
-+{
-+    return m_default;
-+}
-+
-+void BrowserUtil::setDefaultBrowser(const QString &id)
-+{
-+    const auto it = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [&id](const Browser &browser) {
-+        return browser.id == id && browser.installed;
-+    });
-+    if (id == m_default || it == m_browsers.cend()) {
-+        return;
-+    }
-+    m_default = id;
-+    save();
-+    Q_EMIT defaultBrowserChanged();
 +}
 +
 +void BrowserUtil::start()
@@ -677,22 +640,37 @@ index 0000000..bccb962
 +            browser.wanted = browser.installed;
 +            m_browsers << browser;
 +        }
++        // Already settled when there is exactly one, otherwise the user picks
++        // which one stays
++        const auto installed = std::count_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++            return browser.installed;
++        });
++        if (installed == 1) {
++            m_chosen = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++                           return browser.installed;
++                       })->id;
++        }
 +        pickDefault();
 +        Q_EMIT browsersChanged();
 +        Q_EMIT loadingChanged();
 +    });
 +}
 +
-+void BrowserUtil::setWanted(const QString &id, bool wanted)
++void BrowserUtil::choose(const QString &id)
 +{
-+    for (Browser &browser : m_browsers) {
-+        if (browser.id == id && browser.id != m_current && browser.wanted != wanted) {
-+            browser.wanted = wanted;
-+            Q_EMIT browsersChanged();
-+            processNext();
-+            return;
-+        }
++    const bool known = std::any_of(m_browsers.cbegin(), m_browsers.cend(), [&id](const Browser &browser) {
++        return browser.id == id;
++    });
++    if (id == m_chosen || id == m_current || !known) {
++        return;
 +    }
++    m_chosen = id;
++    for (Browser &browser : m_browsers) {
++        browser.wanted = browser.id == id;
++    }
++    pickDefault();
++    Q_EMIT browsersChanged();
++    processNext();
 +}
 +
 +void BrowserUtil::setError(const QString &error)
@@ -705,15 +683,20 @@ index 0000000..bccb962
 +}
 +
 +// Installs or removes the next browser that isn't how it was picked, one at
-+// a time
++// a time. The install goes first, so there is a browser left if it fails
 +void BrowserUtil::processNext()
 +{
 +    if (!m_current.isEmpty()) {
 +        return;
 +    }
-+    const auto next = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
-+        return browser.wanted != browser.installed;
++    auto next = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++        return browser.wanted && !browser.installed;
 +    });
++    if (next == m_browsers.cend()) {
++        next = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++            return browser.wanted != browser.installed;
++        });
++    }
 +    if (next == m_browsers.cend()) {
 +        return;
 +    }
@@ -764,13 +747,20 @@ index 0000000..bccb962
 +{
 +    m_current.clear();
 +    for (Browser &browser : m_browsers) {
-+        if (browser.id != id) {
-+            continue;
++        if (browser.id == id) {
++            browser.installed = preview() ? (error.isEmpty() == install) : installedOnSystem(id);
 +        }
-+        browser.installed = preview() ? (error.isEmpty() == install) : installedOnSystem(id);
-+        // Show how it really is when it failed
-+        if (!error.isEmpty()) {
-+            browser.wanted = browser.installed;
++    }
++    // Show how it really is when it failed, and keep the other browsers when
++    // the chosen one couldn't be installed
++    if (!error.isEmpty()) {
++        for (Browser &browser : m_browsers) {
++            if (browser.id == id || (install && id == m_chosen)) {
++                browser.wanted = browser.installed;
++            }
++        }
++        if (install && id == m_chosen) {
++            m_chosen.clear();
 +        }
 +    }
 +    if (!error.isEmpty()) {
@@ -782,21 +772,30 @@ index 0000000..bccb962
 +    processNext();
 +}
 +
-+// The first installed browser on the list, unless one was picked
++// The chosen browser once it is installed, until then the one before or the
++// first installed one
 +void BrowserUtil::pickDefault()
 +{
-+    const bool keep = std::any_of(m_browsers.cbegin(), m_browsers.cend(), [this](const Browser &browser) {
-+        return browser.installed && browser.id == m_default;
-+    });
-+    if (keep) {
++    const auto installed = [this](const QString &id) {
++        return std::any_of(m_browsers.cbegin(), m_browsers.cend(), [&id](const Browser &browser) {
++            return browser.installed && browser.id == id;
++        });
++    };
++    QString pick = m_chosen;
++    if (!installed(pick)) {
++        pick = m_default;
++    }
++    if (!installed(pick)) {
++        const auto first = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
++            return browser.installed;
++        });
++        pick = first == m_browsers.cend() ? QString() : first->id;
++    }
++    if (pick == m_default) {
 +        return;
 +    }
-+    const auto first = std::find_if(m_browsers.cbegin(), m_browsers.cend(), [](const Browser &browser) {
-+        return browser.installed;
-+    });
-+    m_default = first == m_browsers.cend() ? QString() : first->id;
++    m_default = pick;
 +    save();
-+    Q_EMIT defaultBrowserChanged();
 +}
 +
 +void BrowserUtil::save() const
@@ -809,10 +808,10 @@ index 0000000..bccb962
 +#include "moc_browserutil.cpp"
 diff --git a/modules/browserutil/browserutil.h b/modules/browserutil/browserutil.h
 new file mode 100644
-index 0000000..76779f2
+index 0000000..041a3d9
 --- /dev/null
 +++ b/modules/browserutil/browserutil.h
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,109 @@
 +// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -829,8 +828,8 @@ index 0000000..76779f2
 +
 +/*!
 + * The browsers on the Forge browser list (the one the Arc Store shows),
-+ * installing the ones ticked and removing the ones unticked, and which one
-+ * the new user gets as default.
++ * installing the one chosen and removing the others. The chosen one is the
++ * new user's default.
 + *
 + * Browsers are Flatpaks and go into the system installation, the setup
 + * user's home doesn't survive setup. The default is kept in the setup user's
@@ -844,8 +843,8 @@ index 0000000..76779f2
 +
 +    /*!
 +     * One map per browser on the list: id, name, icon (URL), installed,
-+     * wanted (ticked), working (being installed or removed) and pending
-+     * (waiting to be).
++     * chosen, wanted (to be installed), working (being installed or
++     * removed) and pending (waiting to be).
 +     */
 +    Q_PROPERTY(QVariantList browsers READ browsers NOTIFY browsersChanged)
 +    Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
@@ -858,14 +857,13 @@ index 0000000..76779f2
 +     */
 +    Q_PROPERTY(bool busy READ busy NOTIFY browsersChanged)
 +    /*!
-+     * Whether at least one browser is ticked, setup needs one.
++     * Whether a browser is chosen, setup needs one.
 +     */
 +    Q_PROPERTY(bool hasBrowser READ hasBrowser NOTIFY browsersChanged)
 +    /*!
 +     * Progress of the running install or removal in percent.
 +     */
 +    Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
-+    Q_PROPERTY(QString defaultBrowser READ defaultBrowser WRITE setDefaultBrowser NOTIFY defaultBrowserChanged)
 +
 +public:
 +    explicit BrowserUtil(QObject *parent = nullptr);
@@ -877,8 +875,6 @@ index 0000000..76779f2
 +    bool busy() const;
 +    bool hasBrowser() const;
 +    int percent() const;
-+    QString defaultBrowser() const;
-+    void setDefaultBrowser(const QString &id);
 +
 +    /*!
 +     * Loads the list, once.
@@ -886,17 +882,16 @@ index 0000000..76779f2
 +    Q_INVOKABLE void start();
 +
 +    /*!
-+     * Ticks or unticks the browser. Ticked browsers get installed, unticked
-+     * ones removed, one after another.
++     * Chooses the browser. It gets installed and becomes the default, then
++     * the other browsers on the list get removed, one after another.
 +     */
-+    Q_INVOKABLE void setWanted(const QString &id, bool wanted);
++    Q_INVOKABLE void choose(const QString &id);
 +
 +Q_SIGNALS:
 +    void browsersChanged();
 +    void loadingChanged();
 +    void errorChanged();
 +    void progressChanged();
-+    void defaultBrowserChanged();
 +
 +private:
 +    struct Browser {
@@ -920,13 +915,14 @@ index 0000000..76779f2
 +    QString m_error;
 +    QString m_current;
 +    int m_percent = 0;
++    QString m_chosen;
 +    QString m_default;
 +
 +    QThread *m_worker = nullptr;
 +    GCancellable *m_cancellable = nullptr;
 +};
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index efd9e4d..793282f 100644
+index efd9e4d..1dc269a 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -448,6 +448,7 @@ msgctxt "downloaded of total size"
@@ -937,17 +933,17 @@ index efd9e4d..793282f 100644
  #: modules/updatesutil/updatesutil.cpp:195
  #, kde-format
  msgid "Unknown error"
-@@ -458,6 +459,62 @@ msgstr "Unbekannter Fehler"
+@@ -458,6 +459,57 @@ msgstr "Unbekannter Fehler"
  msgid "Failed to connect to rpm-ostree transaction"
  msgstr "Verbindung zur rpm-ostree-Transaktion fehlgeschlagen"
  
 +#: modules/browser/contents/ui/main.qml:47
 +#, kde-format
 +msgid ""
-+"Choose the web browsers you want. You can install more later in the Arc "
++"Choose the web browser you want. You can install more later in the Arc "
 +"Store."
 +msgstr ""
-+"Wähle die Webbrowser aus, die du möchtest. Weitere kannst du später im Arc "
++"Wähle den Webbrowser aus, den du möchtest. Weitere kannst du später im Arc "
 +"Store installieren."
 +
 +#: modules/browser/contents/ui/main.qml:136
@@ -959,11 +955,6 @@ index efd9e4d..793282f 100644
 +#, kde-format
 +msgid "Waiting…"
 +msgstr "Wartet …"
-+
-+#: modules/browser/contents/ui/main.qml:149
-+#, kde-format
-+msgid "Default browser:"
-+msgstr "Standardbrowser:"
 +
 +#: modules/browserutil/browserutil.cpp:110
 +#, kde-format
@@ -988,8 +979,8 @@ index efd9e4d..793282f 100644
 +
 +#: modules/browser/contents/ui/main.qml:159
 +#, kde-format
-+msgid "Choose at least one browser to continue."
-+msgstr "Wähle mindestens einen Browser aus, um fortzufahren."
++msgid "Choose a browser to continue."
++msgstr "Wähle einen Browser aus, um fortzufahren."
 +
 +#: modules/browserutil/browserutil.cpp:422
 +#, kde-format
