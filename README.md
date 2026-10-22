@@ -62,9 +62,12 @@ It is installed as `/usr/share/plasma-setup/wallpapers.json`. Entries that aren'
 
 ```
 just source           # build/src: upstream as a git tree, patches/ applied as commits
-# edit and commit in build/src (git commit --fixup + rebase --autosquash to amend one)
-just export-patches   # write the commits back to patches/
+# edit in build/src, then either
+just patch "Add a foo page"  # commit the changes as a new patch
+just patch 12                # or fold them into patch 0012
 ```
+
+`just patch` commits what's staged in `build/src`, or everything when nothing is, and writes the commits back to `patches/`. To write a longer message or reword a patch, commit in `build/src` yourself and run `just export-patches`.
 
 The upstream tree installs a clang-format pre-commit hook. Run `git clang-format --staged` if it complains.
 
@@ -83,3 +86,4 @@ The upstream tree installs a clang-format pre-commit hook. Run `git clang-format
 | 0009 | Updates page | After the network page: downloads and stages the latest system image through rpm-ostree, with progress, and restarts right away when there was one (setup then starts again). Setup goes on once up to date, or when updating failed. Skipped without internet: pages can now skip themselves with `skipPage()`. The setup user may upgrade and restart without a password. |
 | 0010 | Web browser page | After the updates page: offers the browsers on the Forge browser list (the one the Arc Store shows) as radio buttons. The chosen one is installed right away as a system-wide Flatpak and becomes the new user's default (`mimeapps.list`, kdeglobals), then the others on the list are removed; setup only goes on with one chosen. Skipped without internet. The setup user may install Flatpak apps and runtimes, and remove apps, without a password. |
 | 0012 | Appearance page | The Dark Theme switch moves onto the wallpaper page, now the Appearance page; the "Before we get started" page isn't built any more. It adds an accent colour row with quick-appearance-kcm's palette, baked into kdeglobals the same way (picking BlossomUI's own blue clears it), which reaches the new user with the theme. The wallpaper goes on the desktop, the lock screen (`kscreenlockerrc`) or both. Once one is picked it replaces the glow behind setup, crossfading on each change. The glow itself crossfades to a new accent colour over 5 seconds instead of blinking. Like the account page, it isn't shown when there are users already. |
+| 0013 | Encryption page | After the web browser page: when the data was encrypted at install time, offers to unlock the disk automatically on start ("Festplatte automatisch entsperren"), worded as a convenience. It enrolls the TPM like `ujust tpm enroll` does (`systemd-cryptenroll --tpm2-device=auto`, PCR 7), and the passphrase keeps working. Only offered when `/etc/crypttab` has a LUKS2 disk without a TPM unlock yet, the TPM 2.0 is usable (`systemd-analyze has-tpm2`) and Secure Boot is on; otherwise skipped. The passphrase is checked with cryptsetup first. The setup user may list and enroll the disks without a password, the helper picks the disks itself. |

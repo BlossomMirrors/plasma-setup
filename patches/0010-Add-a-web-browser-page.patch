@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 05:19:33 +0200
-Subject: [PATCH 10/12] Add a web browser page
+Subject: [PATCH 10/13] Add a web browser page
 
 After the updates page, offers the browsers on the Forge browser list
 (the one the Arc Store shows) as radio buttons. The chosen one is

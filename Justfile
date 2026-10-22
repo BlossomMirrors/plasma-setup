@@ -46,6 +46,35 @@ export-patches:
     git -C {{ src_dir }} format-patch -q --no-signature --zero-commit -o ../../patches upstream..HEAD
     ls patches
 
+# Commit the changes in build/src as a new patch with the given subject, or fold them into patch NUMBER, then export (stages everything unless something is staged already)
+[group('Source')]
+patch target:
+    #!/usr/bin/bash
+    set -euo pipefail
+    [[ -d {{ src_dir }}/.git ]] || { echo "No {{ src_dir }}, run 'just source' first" >&2; exit 1; }
+    cd {{ src_dir }}
+    git diff --cached --quiet && git add -A
+    if git diff --cached --quiet; then
+        echo "No changes in {{ src_dir }}" >&2
+        exit 1
+    fi
+    target={{ quote(target) }}
+    if [[ $target =~ ^[0-9]+$ ]]; then
+        commit=$(git rev-list --reverse upstream..HEAD | sed -n "$((10#$target))p")
+        if [[ -z $commit ]]; then
+            echo "No patch $target, there are $(git rev-list --count upstream..HEAD)" >&2
+            exit 1
+        fi
+        git commit -q --fixup="$commit"
+        git -c sequence.editor=: rebase -q -i --autosquash upstream
+        echo "Updated patch $(printf %04d $((10#$target))): $(git log -1 --format=%s "$(git rev-list --reverse upstream..HEAD | sed -n "$((10#$target))p")")"
+    else
+        git commit -q -m "$target"
+        echo "Added patch $(printf %04d "$(git rev-list --count upstream..HEAD)"): $target"
+    fi
+    cd - >/dev/null
+    {{ just }} export-patches
+
 # Build build/src and install it into build/stage, in the toolbox when run from the host
 [group('Build')]
 build:

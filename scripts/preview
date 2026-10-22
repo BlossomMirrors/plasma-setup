@@ -4,6 +4,9 @@
 # - a throwaway home seeded like tmpfiles seeds /run/plasma-setup, so the
 #   light/dark switch (plasma-apply-lookandfeel) only writes in there
 # - a private session bus, so config change notifications stay in the preview
+# - a private XDG_RUNTIME_DIR, so a document portal the private bus activates
+#   mounts its own doc/ instead of replacing (and on exit removing) the
+#   session's /run/user/$UID/doc, which every Flatpak launch needs
 # - PLASMA_SETUP_PREVIEW=1, so no user, hostname, locale, time zone, keyboard
 #   layout or Wi-Fi connection is set on the system bus
 # Usage: scripts/preview [--dark] [--page NAME] [--screenshot FILE [--delay MS]] [WIDTH HEIGHT]
@@ -48,7 +51,9 @@ stage="${SCRIPT_DIR}/../build/stage"
 stage="$(cd "${stage}" && pwd)"
 
 home="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/plasma-setup-preview.XXXXXX")"
-trap 'rm -rf "${home}"' EXIT
+runtime="${home}/.runtime"
+trap 'fusermount3 -u -z "${runtime}/doc" 2>/dev/null; rm -rf "${home}"' EXIT
+mkdir -m 0700 "${runtime}"
 config="${home}/.config"
 mkdir -p "${config}/autostart" "${home}/.local/share" "${home}/.local/state" "${home}/.cache"
 
@@ -82,6 +87,10 @@ XCURSOR_THEME="$(kreadconfig6 --group Mouse --key cursorTheme --file kcminputrc 
 XCURSOR_SIZE="$(kreadconfig6 --group Mouse --key cursorSize --file kcminputrc --default 20)"
 export XCURSOR_THEME XCURSOR_SIZE
 unset DBUS_SESSION_BUS_ADDRESS WAYLAND_SOCKET
+# The nested KWin still connects to this session's compositor, by absolute path
+wayland_display="${WAYLAND_DISPLAY:-wayland-0}"
+[[ ${wayland_display} == /* ]] || wayland_display="${XDG_RUNTIME_DIR:?}/${wayland_display}"
+export WAYLAND_DISPLAY="${wayland_display}" XDG_RUNTIME_DIR="${runtime}"
 
 session=(kwin_wayland --socket "plasma-setup-preview-$$" --width "${width}" --height "${height}"
          --exit-with-session "${SCRIPT_DIR}/preview --session")

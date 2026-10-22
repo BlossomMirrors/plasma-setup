@@ -1,0 +1,886 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Thu, 22 Oct 2026 06:18:55 +0200
+Subject: [PATCH 13/13] Add a page that offers to unlock the encrypted disk
+ automatically
+
+After the browser page, when the data was encrypted at install time,
+offers to have the computer unlock it on start, like BlossomOS'
+`ujust tpm enroll`: systemd-cryptenroll --tpm2-device=auto, bound to
+PCR 7, with the passphrase kept as a fallback. It is worded as a
+convenience, without TPMs or firmware.
+
+It is only offered when /etc/crypttab has a LUKS2 disk without a TPM
+unlock yet, systemd can use the TPM 2.0 (systemd-analyze has-tpm2) and
+Secure Boot is on; without Secure Boot PCR 7 would unseal the disk for
+whatever boots. Otherwise the page skips itself.
+
+Two new helper actions do the root part, which the setup user may run
+without asking: one lists the disks to enroll, the other checks the
+passphrase on each with cryptsetup and then enrolls them. The disks are
+always the helper's own pick, never the caller's. In a preview the page
+is always offered and enrolling is pretended.
+---
+ files/plasma-setup-polkit.rules           |   2 +
+ modules/CMakeLists.txt                    |   4 +
+ modules/encryption/CMakeLists.txt         |  12 ++
+ modules/encryption/contents/ui/main.qml   | 184 ++++++++++++++++++++++
+ modules/encryption/metadata.json          |  21 +++
+ modules/encryption/metadata.json.license  |   2 +
+ modules/encryptionutil/CMakeLists.txt     |  21 +++
+ modules/encryptionutil/encryptionutil.cpp | 136 ++++++++++++++++
+ modules/encryptionutil/encryptionutil.h   |  61 +++++++
+ po/de/org.kde.plasmasetup.po              |  70 ++++++++
+ src/auth/authhelper.cpp                   | 165 +++++++++++++++++++
+ src/auth/authhelper.h                     |  21 +++
+ src/auth/org.kde.plasmasetup.actions      |  14 ++
+ 13 files changed, 713 insertions(+)
+ create mode 100644 modules/encryption/CMakeLists.txt
+ create mode 100644 modules/encryption/contents/ui/main.qml
+ create mode 100644 modules/encryption/metadata.json
+ create mode 100644 modules/encryption/metadata.json.license
+ create mode 100644 modules/encryptionutil/CMakeLists.txt
+ create mode 100644 modules/encryptionutil/encryptionutil.cpp
+ create mode 100644 modules/encryptionutil/encryptionutil.h
+
+diff --git a/files/plasma-setup-polkit.rules b/files/plasma-setup-polkit.rules
+index c35ffce..64db751 100644
+--- a/files/plasma-setup-polkit.rules
++++ b/files/plasma-setup-polkit.rules
+@@ -38,6 +38,8 @@ polkit.addRule(function (action, subject) {
+         "org.freedesktop.Flatpak.app-install", // Install the browser chosen, system-wide
+         "org.freedesktop.Flatpak.runtime-install", // ...and the runtimes they need
+         "org.freedesktop.Flatpak.app-uninstall", // Remove the other browsers
++        "org.kde.plasmasetup.tpmunlockdevices", // List the encrypted disks the TPM could unlock
++        "org.kde.plasmasetup.enrolltpmunlock", // Let the TPM unlock them, takes their passphrase
+     ];
+ 
+     // Check if the current action is in our allowed list.
+diff --git a/modules/CMakeLists.txt b/modules/CMakeLists.txt
+index 1bd1e23..f39ef1a 100644
+--- a/modules/CMakeLists.txt
++++ b/modules/CMakeLists.txt
+@@ -11,6 +11,9 @@ kpackage_install_package(appearance org.kde.plasmasetup.appearance packages plas
+ add_subdirectory(browser)
+ kpackage_install_package(browser org.kde.plasmasetup.browser packages plasma)
+ 
++add_subdirectory(encryption)
++kpackage_install_package(encryption org.kde.plasmasetup.encryption packages plasma)
++
+ # add_subdirectory(cellular)
+ # kpackage_install_package(cellular org.kde.plasmasetup.cellular packages plasma)
+ 
+@@ -45,6 +48,7 @@ kpackage_install_package(wifi org.kde.plasmasetup.wifi packages plasma)
+ # Helper utilities should be kept separate from the KPackage modules, otherwise
+ # kpackage_install_package() will include all of the uncompiled source files.
+ add_subdirectory(browserutil)
++add_subdirectory(encryptionutil)
+ add_subdirectory(hostnameutil)
+ add_subdirectory(languageutil)
+ add_subdirectory(prepareutil)
+diff --git a/modules/encryption/CMakeLists.txt b/modules/encryption/CMakeLists.txt
+new file mode 100644
+index 0000000..0e3f403
+--- /dev/null
++++ b/modules/encryption/CMakeLists.txt
+@@ -0,0 +1,12 @@
++# SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++#
++# SPDX-License-Identifier: GPL-2.0-or-later
++
++ecm_add_qml_module(plasmasetup_encryption
++    URI "org.kde.plasmasetup.encryption"
++    GENERATE_PLUGIN_SOURCE
++    DEPENDENCIES
++        Qt::Core
++)
++
++ecm_finalize_qml_module(plasmasetup_encryption)
+diff --git a/modules/encryption/contents/ui/main.qml b/modules/encryption/contents/ui/main.qml
+new file mode 100644
+index 0000000..232c61f
+--- /dev/null
++++ b/modules/encryption/contents/ui/main.qml
+@@ -0,0 +1,184 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Layouts
++
++import org.kde.kirigami as Kirigami
++import org.kde.plasmasetup.encryptionutil as Encryption
++
++import org.kde.plasmasetup.components as PlasmaSetupComponents
++
++/**
++* @brief Module that lets the TPM unlock the encrypted disk
++*
++* Offers to unlock the encrypted disk on start, with the TPM, when it can
++* and Secure Boot is on. Worded as a convenience, without TPMs or PCRs. Asks
++* for the passphrase to set it up. Setup goes on once it is set up, or with
++* the passphrase asked for on start.
++*/
++PlasmaSetupComponents.SetupModule {
++    id: root
++
++    readonly property int enrollState: Encryption.EncryptionUtil.state
++    readonly property bool enrolled: enrollState === Encryption.EncryptionUtil.Enrolled
++    readonly property bool enrolling: enrollState === Encryption.EncryptionUtil.Enrolling
++
++    nextEnabled: !enrolling && (askButton.checked || enrolled)
++    // No leaving while the TPM is being set up
++    backEnabled: !enrolling
++
++    function skipPage(): bool {
++        return !Encryption.EncryptionUtil.offered;
++    }
++
++    function onPageActivated(): void {
++        if (automaticButton.checked && !enrolled) {
++            passphraseField.forceActiveFocus();
++        }
++    }
++
++    function enroll(): void {
++        if (passphraseField.text !== "") {
++            Encryption.EncryptionUtil.enroll(passphraseField.text);
++        }
++    }
++
++    Connections {
++        target: Encryption.EncryptionUtil
++
++        function onStateChanged(): void {
++            if (root.enrolled) {
++                passphraseField.clear();
++            } else if (root.enrollState === Encryption.EncryptionUtil.WrongPassphrase) {
++                passphraseField.selectAll();
++                passphraseField.forceActiveFocus();
++            }
++        }
++    }
++
++    contentItem: ColumnLayout {
++        spacing: Kirigami.Units.largeSpacing
++
++        Item {
++            Layout.fillHeight: true
++        }
++
++        // Like the outcome on the updates page: the icon on a circle of its
++        // colour at 18%
++        Rectangle {
++            id: badge
++
++            readonly property color tint: root.enrolled ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.textColor
++
++            Layout.alignment: Qt.AlignHCenter
++            Layout.preferredWidth: 56
++            Layout.preferredHeight: 56
++            radius: width / 2
++            color: root.enrolled ? Qt.alpha(tint, 0.18) : "transparent"
++
++            Kirigami.Icon {
++                anchors.centerIn: parent
++                width: 32
++                height: 32
++                source: root.enrolled ? "emblem-ok-symbolic" : "security-high-symbolic"
++                isMask: true
++                roundToIconSize: false
++                color: badge.tint
++            }
++        }
++
++        Kirigami.Heading {
++            Layout.fillWidth: true
++            horizontalAlignment: Text.AlignHCenter
++            wrapMode: Text.Wrap
++            level: 2
++            text: root.enrolled ? i18n("Disk Unlocks Automatically") : i18n("Unlock Disk Automatically?")
++        }
++
++        Label {
++            Layout.fillWidth: true
++            Layout.leftMargin: Kirigami.Units.gridUnit
++            Layout.rightMargin: Kirigami.Units.gridUnit
++            horizontalAlignment: Text.AlignHCenter
++            wrapMode: Text.Wrap
++            text: root.enrolled
++                ? i18n("Your computer now unlocks your disk by itself when it starts. Once in a while it may still ask for your passphrase, so keep it somewhere safe.")
++                : i18n("Your computer supports unlocking your disk automatically. Would you like to turn it on? Then you don't have to type your passphrase every time it starts.")
++        }
++
++        ColumnLayout {
++            Layout.alignment: Qt.AlignHCenter
++            Layout.topMargin: Kirigami.Units.largeSpacing
++            visible: !root.enrolled
++            enabled: !root.enrolling
++            spacing: Kirigami.Units.smallSpacing
++
++            RadioButton {
++                id: automaticButton
++                checked: true
++                text: i18n("Unlock disk automatically")
++                onToggled: passphraseField.forceActiveFocus()
++            }
++
++            RadioButton {
++                id: askButton
++                text: i18n("Ask for the passphrase every time")
++            }
++        }
++
++        RowLayout {
++            Layout.alignment: Qt.AlignHCenter
++            Layout.maximumWidth: Kirigami.Units.gridUnit * 20
++            visible: automaticButton.checked && !root.enrolled
++            enabled: !root.enrolling
++            spacing: Kirigami.Units.smallSpacing
++
++            Kirigami.PasswordField {
++                id: passphraseField
++                Layout.fillWidth: true
++                placeholderText: i18nc("@info:placeholder", "Encryption passphrase")
++                onAccepted: root.enroll()
++            }
++
++            Button {
++                text: i18nc("@action:button", "Turn On")
++                enabled: passphraseField.text !== ""
++                onClicked: root.enroll()
++            }
++        }
++
++        BusyIndicator {
++            Layout.alignment: Qt.AlignHCenter
++            visible: root.enrolling
++            running: visible
++        }
++
++        Kirigami.InlineMessage {
++            Layout.fillWidth: true
++            Layout.maximumWidth: Kirigami.Units.gridUnit * 20
++            Layout.alignment: Qt.AlignHCenter
++            visible: automaticButton.checked && (root.enrollState === Encryption.EncryptionUtil.WrongPassphrase || root.enrollState === Encryption.EncryptionUtil.Failed)
++            type: root.enrollState === Encryption.EncryptionUtil.WrongPassphrase ? Kirigami.MessageType.Warning : Kirigami.MessageType.Error
++            text: root.enrollState === Encryption.EncryptionUtil.WrongPassphrase
++                ? i18n("That's not the right passphrase.")
++                : i18n("This didn't work on your computer. You can keep using your passphrase.")
++        }
++
++        Label {
++            Layout.fillWidth: true
++            horizontalAlignment: Text.AlignHCenter
++            wrapMode: Text.Wrap
++            visible: automaticButton.checked && root.enrollState === Encryption.EncryptionUtil.Idle
++            color: Kirigami.Theme.neutralTextColor
++            text: i18n("Enter your passphrase once to turn this on.")
++        }
++
++        Item {
++            Layout.fillHeight: true
++        }
++    }
++}
+diff --git a/modules/encryption/metadata.json b/modules/encryption/metadata.json
+new file mode 100644
+index 0000000..a939cb9
+--- /dev/null
++++ b/modules/encryption/metadata.json
+@@ -0,0 +1,21 @@
++{
++    "KPackageStructure": "KDE/PlasmaSetup",
++    "KPlugin": {
++        "Authors": [
++            {
++                "Email": "me@koyu.space",
++                "Name": "Leonie Ain"
++            }
++        ],
++        "Description": "Offer to unlock the encrypted data automatically on start.",
++        "Description[de]": "Anbieten, die verschlüsselten Daten beim Start automatisch zu entsperren.",
++        "Id": "org.kde.plasmasetup.encryption",
++        "License": "GPL-2.0-or-later",
++        "Name": "Encryption",
++        "Name[de]": "Verschlüsselung",
++        "Website": "https://blossomos.org"
++    },
++    "NoDisplay": true,
++    "X-KDE-ParentApp": "org.kde.plasmasetup",
++    "X-KDE-Weight": 58
++}
+diff --git a/modules/encryption/metadata.json.license b/modules/encryption/metadata.json.license
+new file mode 100644
+index 0000000..4ed95c4
+--- /dev/null
++++ b/modules/encryption/metadata.json.license
+@@ -0,0 +1,2 @@
++SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++SPDX-License-Identifier: GPL-2.0-or-later
+diff --git a/modules/encryptionutil/CMakeLists.txt b/modules/encryptionutil/CMakeLists.txt
+new file mode 100644
+index 0000000..df1dbb5
+--- /dev/null
++++ b/modules/encryptionutil/CMakeLists.txt
+@@ -0,0 +1,21 @@
++# SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++#
++# SPDX-License-Identifier: GPL-2.0-or-later
++
++ecm_add_qml_module(plasmasetup_encryptionutil
++    URI "org.kde.plasmasetup.encryptionutil"
++    GENERATE_PLUGIN_SOURCE
++)
++
++target_sources(plasmasetup_encryptionutil PRIVATE
++    encryptionutil.cpp
++    encryptionutil.h
++)
++
++target_link_libraries(plasmasetup_encryptionutil PRIVATE
++    Qt::Core
++    Qt::Quick
++    KF6::AuthCore
++)
++
++ecm_finalize_qml_module(plasmasetup_encryptionutil)
+diff --git a/modules/encryptionutil/encryptionutil.cpp b/modules/encryptionutil/encryptionutil.cpp
+new file mode 100644
+index 0000000..1ca40bd
+--- /dev/null
++++ b/modules/encryptionutil/encryptionutil.cpp
+@@ -0,0 +1,136 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "encryptionutil.h"
++
++#include <KAuth/Action>
++#include <KAuth/ExecuteJob>
++
++#include <QFile>
++#include <QProcess>
++#include <QTimer>
++
++using namespace Qt::StringLiterals;
++
++namespace
++{
++constexpr auto HELPER_ID = "org.kde.plasmasetup";
++
++// EFI global variable, attributes then one byte: 1 when on
++constexpr auto SECURE_BOOT_EFIVAR = "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d0-aa0d-00e098032b8c";
++
++bool preview()
++{
++    return qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1;
++}
++
++bool secureBootEnabled()
++{
++    QFile efivar{QLatin1String(SECURE_BOOT_EFIVAR)};
++    if (!efivar.open(QIODevice::ReadOnly)) {
++        return false;
++    }
++    const QByteArray data = efivar.readAll();
++    return data.size() >= 5 && data.at(4) == 1;
++}
++}
++
++EncryptionUtil::EncryptionUtil(QObject *parent)
++    : QObject{parent}
++{
++    if (preview()) {
++        // Offered on any machine, enrolling is pretended
++        m_offered = true;
++        return;
++    }
++
++    if (secureBootEnabled()) {
++        checkTpm();
++    }
++}
++
++bool EncryptionUtil::offered() const
++{
++    return m_offered;
++}
++
++EncryptionUtil::State EncryptionUtil::state() const
++{
++    return m_state;
++}
++
++void EncryptionUtil::checkTpm()
++{
++    // Firmware, driver, systemd and the TPM libraries, all there
++    auto *process = new QProcess(this);
++    connect(process, &QProcess::finished, this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
++        process->deleteLater();
++        if (exitStatus == QProcess::NormalExit && exitCode == 0) {
++            checkDevices();
++        }
++    });
++    connect(process, &QProcess::errorOccurred, process, &QObject::deleteLater);
++    process->start(u"systemd-analyze"_s, {u"has-tpm2"_s, u"-q"_s});
++}
++
++void EncryptionUtil::checkDevices()
++{
++    // Only root can read /etc/crypttab and the LUKS headers
++    KAuth::Action action(u"org.kde.plasmasetup.tpmunlockdevices"_s);
++    action.setHelperId(QLatin1String(HELPER_ID));
++    KAuth::ExecuteJob *job = action.execute();
++    connect(job, &KJob::result, this, [this, job] {
++        if (job->error()) {
++            qWarning() << "Failed to list the disks the TPM could unlock:" << job->errorString();
++            return;
++        }
++        if (!job->data().value(u"devices"_s).toStringList().isEmpty()) {
++            m_offered = true;
++            Q_EMIT offeredChanged();
++        }
++    });
++    job->start();
++}
++
++void EncryptionUtil::enroll(const QString &passphrase)
++{
++    if (m_state == Enrolling || m_state == Enrolled || passphrase.isEmpty()) {
++        return;
++    }
++    setState(Enrolling);
++
++    if (preview()) {
++        // Pretend, the preview changes nothing on the system
++        QTimer::singleShot(2000, this, [this] {
++            setState(Enrolled);
++        });
++        return;
++    }
++
++    KAuth::Action action(u"org.kde.plasmasetup.enrolltpmunlock"_s);
++    action.setHelperId(QLatin1String(HELPER_ID));
++    action.setArguments({{u"passphrase"_s, passphrase}});
++    KAuth::ExecuteJob *job = action.execute();
++    connect(job, &KJob::result, this, [this, job] {
++        if (job->error()) {
++            qWarning() << "Failed to let the TPM unlock the disks:" << job->errorString();
++            setState(Failed);
++        } else if (job->data().value(u"wrongPassphrase"_s).toBool()) {
++            setState(WrongPassphrase);
++        } else {
++            setState(Enrolled);
++        }
++    });
++    job->start();
++}
++
++void EncryptionUtil::setState(State state)
++{
++    if (m_state == state) {
++        return;
++    }
++    m_state = state;
++    Q_EMIT stateChanged();
++}
++
++#include "moc_encryptionutil.cpp"
+diff --git a/modules/encryptionutil/encryptionutil.h b/modules/encryptionutil/encryptionutil.h
+new file mode 100644
+index 0000000..2f714ea
+--- /dev/null
++++ b/modules/encryptionutil/encryptionutil.h
+@@ -0,0 +1,61 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include <QObject>
++#include <qqmlintegration.h>
++
++/*!
++ * Lets the TPM unlock the encrypted disk on start, like BlossomOS'
++ * `ujust tpm enroll`: an extra unlock method bound to PCR 7, the passphrase
++ * keeps working.
++ *
++ * Offered when there is an encrypted disk without a TPM unlock yet, a TPM 2.0
++ * systemd can use, and Secure Boot is on. Without Secure Boot PCR 7 would
++ * unseal the disk for whatever boots.
++ */
++class EncryptionUtil : public QObject
++{
++    Q_OBJECT
++    QML_ELEMENT
++    QML_SINGLETON
++
++    /*!
++     * Whether to offer it. Finds out right away, false until then.
++     */
++    Q_PROPERTY(bool offered READ offered NOTIFY offeredChanged)
++    Q_PROPERTY(State state READ state NOTIFY stateChanged)
++
++public:
++    enum State {
++        Idle,
++        Enrolling,
++        Enrolled,
++        WrongPassphrase,
++        Failed,
++    };
++    Q_ENUM(State)
++
++    explicit EncryptionUtil(QObject *parent = nullptr);
++
++    bool offered() const;
++    State state() const;
++
++    /*!
++     * Lets the TPM unlock the disks encrypted with the passphrase.
++     */
++    Q_INVOKABLE void enroll(const QString &passphrase);
++
++Q_SIGNALS:
++    void offeredChanged();
++    void stateChanged();
++
++private:
++    void checkTpm();
++    void checkDevices();
++    void setState(State state);
++
++    bool m_offered = false;
++    State m_state = Idle;
++};
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index 0e569fd..f1f07ae 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -539,6 +539,76 @@ msgctxt "%1 is a browser, %2 the error"
+ msgid "Couldn't remove %1: %2"
+ msgstr "%1 konnte nicht entfernt werden: %2"
+ 
++#: modules/encryption/contents/ui/main.qml:99
++#, kde-format
++msgid "Disk Unlocks Automatically"
++msgstr "Festplatte wird automatisch entsperrt"
++
++#: modules/encryption/contents/ui/main.qml:99
++#, kde-format
++msgid "Unlock Disk Automatically?"
++msgstr "Festplatte automatisch entsperren?"
++
++#: modules/encryption/contents/ui/main.qml:109
++#, kde-format
++msgid ""
++"Your computer now unlocks your disk by itself when it starts. Once in a "
++"while it may still ask for your passphrase, so keep it somewhere safe."
++msgstr ""
++"Dein Computer entsperrt deine Festplatte jetzt beim Start von selbst. Ab "
++"und zu fragt er vielleicht trotzdem nach deinem Passwort, also bewahre es "
++"gut auf."
++
++#: modules/encryption/contents/ui/main.qml:110
++#, kde-format
++msgid ""
++"Your computer supports unlocking your disk automatically. Would you like to "
++"turn it on? Then you don't have to type your passphrase every time it "
++"starts."
++msgstr ""
++"Dein Computer unterstützt das automatische Entsperren deiner Festplatte. "
++"Möchtest du das aktivieren? Dann musst du dein Passwort nicht bei jedem "
++"Start eingeben."
++
++#: modules/encryption/contents/ui/main.qml:123
++#, kde-format
++msgid "Unlock disk automatically"
++msgstr "Festplatte automatisch entsperren"
++
++#: modules/encryption/contents/ui/main.qml:129
++#, kde-format
++msgid "Ask for the passphrase every time"
++msgstr "Jedes Mal nach dem Passwort fragen"
++
++#: modules/encryption/contents/ui/main.qml:143
++#, kde-format
++msgctxt "@info:placeholder"
++msgid "Encryption passphrase"
++msgstr "Verschlüsselungspasswort"
++
++#: modules/encryption/contents/ui/main.qml:148
++#, kde-format
++msgctxt "@action:button"
++msgid "Turn On"
++msgstr "Aktivieren"
++
++#: modules/encryption/contents/ui/main.qml:167
++#, kde-format
++msgid "That's not the right passphrase."
++msgstr "Das ist nicht das richtige Passwort."
++
++#: modules/encryption/contents/ui/main.qml:168
++#, kde-format
++msgid "This didn't work on your computer. You can keep using your passphrase."
++msgstr ""
++"Das hat auf deinem Computer nicht geklappt. Du kannst weiter dein Passwort "
++"verwenden."
++
++#: modules/encryption/contents/ui/main.qml:177
++#, kde-format
++msgid "Enter your passphrase once to turn this on."
++msgstr "Gib dein Passwort einmal ein, um das zu aktivieren."
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Passen Sie die Größe der Elemente auf dem Bildschirm an."
+ 
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index a0fae89..90a77b5 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -15,8 +15,11 @@
+ #include <QDir>
+ #include <QFile>
+ #include <QFileInfo>
++#include <QJsonDocument>
++#include <QJsonObject>
+ #include <QProcess>
+ #include <QRegularExpression>
++#include <QScopeGuard>
+ #include <QStandardPaths>
+ #include <QUrl>
+ #include <QtDBus/QDBusInterface>
+@@ -163,6 +166,74 @@ static QString validateGroupName(const QString &group)
+     return QString();
+ }
+ 
++/**
++ * The encrypted disks the TPM could unlock on start, like BlossomOS' `ujust tpm enroll`
++ * finds them: the devices in /etc/crypttab, if they are LUKS2 and have no TPM unlock yet.
++ *
++ * @return The device paths, under /dev.
++ */
++static QStringList tpmUnlockDevices()
++{
++    QStringList devices;
++
++    QFile crypttab(QStringLiteral("/etc/crypttab"));
++    const QString cryptsetupBinary = findExecutable(QStringLiteral("cryptsetup"));
++    if (cryptsetupBinary.isEmpty() || !crypttab.open(QIODevice::ReadOnly | QIODevice::Text)) {
++        return devices;
++    }
++
++    static const QRegularExpression whitespace(QStringLiteral("\\s+"));
++    static const QList<std::pair<QString, QString>> tags = {
++        {QStringLiteral("UUID="), QStringLiteral("/dev/disk/by-uuid/")},
++        {QStringLiteral("PARTUUID="), QStringLiteral("/dev/disk/by-partuuid/")},
++        {QStringLiteral("LABEL="), QStringLiteral("/dev/disk/by-label/")},
++        {QStringLiteral("PARTLABEL="), QStringLiteral("/dev/disk/by-partlabel/")},
++    };
++
++    while (!crypttab.atEnd()) {
++        const QString line = QString::fromUtf8(crypttab.readLine()).trimmed();
++        if (line.isEmpty() || line.startsWith(QLatin1Char('#'))) {
++            continue;
++        }
++
++        // name, device, key file, options
++        const QStringList fields = line.split(whitespace);
++        if (fields.size() < 2) {
++            continue;
++        }
++
++        QString source = fields.at(1);
++        for (const auto &[tag, directory] : tags) {
++            if (source.startsWith(tag)) {
++                source = directory + source.mid(tag.size());
++                break;
++            }
++        }
++
++        const QString device = QFileInfo(source).canonicalFilePath();
++        if (!device.startsWith(QLatin1String("/dev/")) || devices.contains(device)) {
++            continue;
++        }
++
++        // Only LUKS2 can hold the TPM token, and LUKS1 fails to dump as JSON
++        QProcess dumpProcess;
++        dumpProcess.start(cryptsetupBinary, {QStringLiteral("luksDump"), QStringLiteral("--dump-json-metadata"), device});
++        if (!dumpProcess.waitForFinished() || dumpProcess.exitStatus() != QProcess::NormalExit || dumpProcess.exitCode() != 0) {
++            continue;
++        }
++
++        const QJsonObject tokens = QJsonDocument::fromJson(dumpProcess.readAllStandardOutput()).object().value(QStringLiteral("tokens")).toObject();
++        const bool hasTpmUnlock = std::any_of(tokens.begin(), tokens.end(), [](const QJsonValue &token) {
++            return token.toObject().value(QStringLiteral("type")).toString() == QLatin1String("systemd-tpm2");
++        });
++        if (!hasTpmUnlock) {
++            devices << device;
++        }
++    }
++
++    return devices;
++}
++
+ ActionReply PlasmaSetupAuthHelper::createuser(const QVariantMap &args)
+ {
+     // Extract and validate input arguments.
+@@ -687,6 +758,100 @@ ActionReply PlasmaSetupAuthHelper::setnewusertempautologin(const QVariantMap &ar
+     return ActionReply::SuccessReply();
+ }
+ 
++ActionReply PlasmaSetupAuthHelper::tpmunlockdevices(const QVariantMap &args)
++{
++    Q_UNUSED(args);
++
++    ActionReply reply = ActionReply::SuccessReply();
++    reply.setData({{QStringLiteral("devices"), tpmUnlockDevices()}});
++    return reply;
++}
++
++ActionReply PlasmaSetupAuthHelper::enrolltpmunlock(const QVariantMap &args)
++{
++    // The passphrase is handled as a QByteArray to clear it after use, like the password in createuser()
++    if (!args.value(QStringLiteral("passphrase")).canConvert<QByteArray>()) {
++        return makeErrorReply(QStringLiteral("Passphrase argument is missing or invalid."));
++    }
++    QByteArray passphrase = args.value(QStringLiteral("passphrase")).toByteArray();
++    const auto clearPassphrase = qScopeGuard([&passphrase] {
++        std::fill(passphrase.begin(), passphrase.end(), '\0');
++    });
++
++    if (passphrase.isEmpty()) {
++        return makeErrorReply(QStringLiteral("Passphrase cannot be empty."));
++    }
++
++    // Never what the caller names, only the disks that are there to enroll
++    const QStringList devices = tpmUnlockDevices();
++    if (devices.isEmpty()) {
++        return makeErrorReply(QStringLiteral("There is no encrypted disk to unlock automatically."));
++    }
++
++    const QString cryptsetupBinary = findExecutable(QStringLiteral("cryptsetup"));
++    const QString cryptenrollBinary = findExecutable(QStringLiteral("systemd-cryptenroll"));
++    if (cryptsetupBinary.isEmpty() || cryptenrollBinary.isEmpty()) {
++        return makeErrorReply(QStringLiteral("Could not locate cryptsetup or systemd-cryptenroll executable."));
++    }
++
++    // Check the passphrase on every disk first: systemd-cryptenroll would ask
++    // for another one when it is wrong, with nobody there to answer
++    for (const QString &device : devices) {
++        QProcess testProcess;
++        testProcess.start(cryptsetupBinary, {QStringLiteral("open"), QStringLiteral("--test-passphrase"), QStringLiteral("--key-file=-"), device});
++        if (!testProcess.waitForStarted()) {
++            return makeErrorReply(QStringLiteral("Failed to start cryptsetup: ") + testProcess.errorString());
++        }
++
++        // A key file from stdin is taken as is, without a trailing newline
++        testProcess.write(passphrase);
++        testProcess.closeWriteChannel();
++
++        if (!testProcess.waitForFinished()) {
++            testProcess.kill();
++            testProcess.waitForFinished();
++            return makeErrorReply(QStringLiteral("cryptsetup timed out."));
++        }
++
++        if (testProcess.exitStatus() != QProcess::NormalExit || testProcess.exitCode() != 0) {
++            ActionReply reply = ActionReply::SuccessReply();
++            reply.setData({{QStringLiteral("wrongPassphrase"), true}});
++            return reply;
++        }
++    }
++
++    // What `ujust tpm enroll` runs: bound to PCR 7, the Secure Boot state, which BlossomOS Recovery extends so its
++    // boots can't unseal the disks. systemd-cryptenroll takes the passphrase from $PASSWORD, which only root can read
++    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
++    environment.insert(QStringLiteral("PASSWORD"), QString::fromUtf8(passphrase));
++
++    for (const QString &device : devices) {
++        QProcess enrollProcess;
++        enrollProcess.setProcessEnvironment(environment);
++        enrollProcess.start(cryptenrollBinary, {QStringLiteral("--tpm2-device=auto"), device});
++
++        if (!enrollProcess.waitForStarted()) {
++            return makeErrorReply(QStringLiteral("Failed to start systemd-cryptenroll: ") + enrollProcess.errorString());
++        }
++
++        if (!enrollProcess.waitForFinished(120000)) {
++            enrollProcess.kill();
++            enrollProcess.waitForFinished();
++            return makeErrorReply(QStringLiteral("systemd-cryptenroll timed out for ") + device);
++        }
++
++        if (enrollProcess.exitStatus() != QProcess::NormalExit || enrollProcess.exitCode() != 0) {
++            const QString stderrOutput = QString::fromLocal8Bit(enrollProcess.readAllStandardError()).trimmed();
++            return makeErrorReply(
++                QStringLiteral("systemd-cryptenroll failed for %1 with exit code %2: %3").arg(device).arg(enrollProcess.exitCode()).arg(stderrOutput));
++        }
++    }
++
++    ActionReply reply = ActionReply::SuccessReply();
++    reply.setData({{QStringLiteral("devices"), devices}});
++    return reply;
++}
++
+ ActionReply PlasmaSetupAuthHelper::addUserToExtraGroups(const QString &username, const QVariant &extraGroupsVariant)
+ {
+     if (!extraGroupsVariant.canConvert<QStringList>()) {
+diff --git a/src/auth/authhelper.h b/src/auth/authhelper.h
+index 1593afe..0d6cfb7 100644
+--- a/src/auth/authhelper.h
++++ b/src/auth/authhelper.h
+@@ -110,6 +110,27 @@ public Q_SLOTS:
+      */
+     ActionReply setnewusertempautologin(const QVariantMap &args);
+ 
++    /**
++     * Lists the encrypted disks the TPM could unlock on start: the LUKS2
++     * devices in `/etc/crypttab` that have no TPM unlock yet.
++     *
++     * @param args The arguments passed to the action (not used here).
++     * @return An ActionReply with the device paths in "devices".
++     */
++    ActionReply tpmunlockdevices(const QVariantMap &args);
++
++    /**
++     * Enrolls the TPM as an extra unlock method, bound to PCR 7, for the disks
++     * tpmunlockdevices() lists. Like BlossomOS' `ujust tpm enroll`, the
++     * passphrase keeps working.
++     *
++     * @param args The arguments passed to the action, which should include:
++     * - String: "passphrase": The passphrase the disks are encrypted with.
++     * @return An ActionReply, with "wrongPassphrase" set when the passphrase
++     * doesn't unlock the disks.
++     */
++    ActionReply enrolltpmunlock(const QVariantMap &args);
++
+ private:
+     /**
+      * Adds a user to the provided supplementary groups using usermod.
+diff --git a/src/auth/org.kde.plasmasetup.actions b/src/auth/org.kde.plasmasetup.actions
+index 4440cc0..1ba631e 100644
+--- a/src/auth/org.kde.plasmasetup.actions
++++ b/src/auth/org.kde.plasmasetup.actions
+@@ -572,3 +572,17 @@ Description[uk]=Встановити налаштування тимчасово
+ Description[zh_CN]=设置新建用户的显示管理器临时自动登录配置
+ Description[zh_TW]=為新建立的使用者設定登入畫面的暫時性自動登入配置
+ Policy=no
++
++[org.kde.plasmasetup.tpmunlockdevices]
++Name=List Disks to Unlock Automatically
++Name[de]=Automatisch entsperrbare Festplatten auflisten
++Description=List the encrypted disks the TPM could unlock on start
++Description[de]=Die verschlüsselten Festplatten auflisten, die das TPM beim Start entsperren könnte
++Policy=no
++
++[org.kde.plasmasetup.enrolltpmunlock]
++Name=Unlock Disks Automatically
++Name[de]=Festplatten automatisch entsperren
++Description=Let the TPM unlock the encrypted disks on start
++Description[de]=Das TPM die verschlüsselten Festplatten beim Start entsperren lassen
++Policy=no
