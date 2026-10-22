@@ -16,7 +16,7 @@ to a new accent colour over 5 seconds instead of blinking out.
 ---
  modules/CMakeLists.txt                        |  11 +-
  .../{wallpaper => appearance}/CMakeLists.txt  |   6 +-
- modules/appearance/contents/ui/main.qml       | 313 ++++++++++++++++++
+ modules/appearance/contents/ui/main.qml       | 317 ++++++++++++++++++
  .../{wallpaper => appearance}/metadata.json   |  12 +-
  .../metadata.json.license                     |   0
  modules/prepareutil/prepareutil.cpp           | 151 ++++++++-
@@ -27,7 +27,7 @@ to a new accent colour over 5 seconds instead of blinking out.
  po/de/org.kde.plasmasetup.po                  |  43 ++-
  src/auth/authhelper.cpp                       |  34 +-
  src/qml/Backdrop.qml                          | 144 +++++++-
- 13 files changed, 824 insertions(+), 203 deletions(-)
+ 13 files changed, 828 insertions(+), 203 deletions(-)
  rename modules/{wallpaper => appearance}/CMakeLists.txt (56%)
  create mode 100644 modules/appearance/contents/ui/main.qml
  rename modules/{wallpaper => appearance}/metadata.json (50%)
@@ -94,10 +94,10 @@ index 3d77756..73e44ce 100644
 +ecm_finalize_qml_module(plasmasetup_appearance)
 diff --git a/modules/appearance/contents/ui/main.qml b/modules/appearance/contents/ui/main.qml
 new file mode 100644
-index 0000000..bf49cf4
+index 0000000..0ecac02
 --- /dev/null
 +++ b/modules/appearance/contents/ui/main.qml
-@@ -0,0 +1,313 @@
+@@ -0,0 +1,317 @@
 +// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -110,6 +110,7 @@ index 0000000..bf49cf4
 +
 +import org.kde.kirigami as Kirigami
 +import org.kde.kirigamiaddons.formcard as FormCard
++import org.kde.plasmasetup
 +import org.kde.plasmasetup.prepareutil as Prepare
 +import org.kde.plasmasetup.wallpaperutil as Wallpaper
 +
@@ -121,10 +122,13 @@ index 0000000..bf49cf4
 +* The light/dark switch, the accent colour (the palette of
 +* quick-appearance-kcm), and the desktop and lock screen wallpaper from the
 +* ones listed in plasma-setup/wallpapers.json, shown in their dark variant
-+* while the dark theme is on.
++* while the dark theme is on. Not shown when there are users already, as no
++* new one is created to take the choices.
 +*/
 +PlasmaSetupComponents.SetupModule {
 +    id: root
++
++    available: !AccountController.hasExistingUsers
 +
 +    // Same as quick-appearance-kcm's, the first is BlossomUI's own
 +    readonly property var accentPalette: ["#3e78ff", "#ff5266", "#ef8c4a", "#dfb355", "#4cd47c", "#45cfab", "#45ace6", "#7d52ff", "#b552ff", "#ff52b5", "#8fa3c4"]
