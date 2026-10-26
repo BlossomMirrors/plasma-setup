@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 01:14:27 +0200
-Subject: [PATCH 01/13] prepareutil: Use the BlossomUI look and feel for the
+Subject: [PATCH 01/15] prepareutil: Use the BlossomUI look and feel for the
  light/dark toggle
 
 Applies org.blossomos.ui.{light,dark}.desktop instead of Breeze and

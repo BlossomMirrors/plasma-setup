@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 05:10:33 +0200
-Subject: [PATCH 09/13] Add an updates page
+Subject: [PATCH 09/15] Add an updates page
 
 After the network page, downloads and stages the latest system image
 through rpm-ostree, with the download progress estimated like in

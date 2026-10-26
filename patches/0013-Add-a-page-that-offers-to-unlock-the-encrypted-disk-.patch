@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Thu, 22 Oct 2026 06:18:55 +0200
-Subject: [PATCH 13/13] Add a page that offers to unlock the encrypted disk
+Subject: [PATCH 13/15] Add a page that offers to unlock the encrypted disk
  automatically
 
 After the browser page, when the data was encrypted at install time,
@@ -57,7 +57,7 @@ index c35ffce..64db751 100644
  
      // Check if the current action is in our allowed list.
 diff --git a/modules/CMakeLists.txt b/modules/CMakeLists.txt
-index 1bd1e23..f39ef1a 100644
+index 2eb2cbf..785f646 100644
 --- a/modules/CMakeLists.txt
 +++ b/modules/CMakeLists.txt
 @@ -11,6 +11,9 @@ kpackage_install_package(appearance org.kde.plasmasetup.appearance packages plas
@@ -70,7 +70,7 @@ index 1bd1e23..f39ef1a 100644
  # add_subdirectory(cellular)
  # kpackage_install_package(cellular org.kde.plasmasetup.cellular packages plasma)
  
-@@ -45,6 +48,7 @@ kpackage_install_package(wifi org.kde.plasmasetup.wifi packages plasma)
+@@ -41,6 +44,7 @@ kpackage_install_package(wifi org.kde.plasmasetup.wifi packages plasma)
  # Helper utilities should be kept separate from the KPackage modules, otherwise
  # kpackage_install_package() will include all of the uncompiled source files.
  add_subdirectory(browserutil)

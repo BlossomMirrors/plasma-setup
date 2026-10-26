@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 01:14:45 +0200
-Subject: [PATCH 02/13] authhelper: Merge the chosen theme into the new user's
+Subject: [PATCH 02/15] authhelper: Merge the chosen theme into the new user's
  kdeglobals
 
 Copying the setup user's kdeglobals over the new user's threw away

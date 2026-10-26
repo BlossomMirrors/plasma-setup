@@ -1,11 +1,12 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 13:02:13 +0200
-Subject: [PATCH 12/13] Merge the theme switch and wallpaper page into an
+Subject: [PATCH 12/15] Merge the theme switch and wallpaper page into an
  appearance page
 
 The Dark Theme switch moves from the "Before we get started" page, which
-is no longer built, to the wallpaper page, now the appearance page. It
+is removed, to the wallpaper page, now the appearance page. PrepareUtil
+stays, it backs the switch. It
 also gets an accent colour row with quick-appearance-kcm's palette, baked
 into kdeglobals the same way and merged into the new user's along with
 the theme. Picking BlossomUI's own blue clears the accent again.
@@ -14,11 +15,15 @@ The wallpaper can go on the desktop, the lock screen or both. Once the
 user picks one, it replaces the glow behind setup. The glow crossfades
 to a new accent colour over 5 seconds instead of blinking out.
 ---
- modules/CMakeLists.txt                        |  11 +-
+ modules/CMakeLists.txt                        |   9 +-
  .../{wallpaper => appearance}/CMakeLists.txt  |   6 +-
  modules/appearance/contents/ui/main.qml       | 317 ++++++++++++++++++
  .../{wallpaper => appearance}/metadata.json   |  12 +-
  .../metadata.json.license                     |   0
+ modules/prepare/CMakeLists.txt                |  11 -
+ modules/prepare/contents/ui/main.qml          |  87 -----
+ modules/prepare/metadata.json                 | 123 -------
+ modules/prepare/metadata.json.license         |   3 -
  modules/prepareutil/prepareutil.cpp           | 151 ++++++++-
  modules/prepareutil/prepareutil.h             |  12 +
  modules/wallpaper/contents/ui/main.qml        | 144 --------
@@ -27,15 +32,19 @@ to a new accent colour over 5 seconds instead of blinking out.
  po/de/org.kde.plasmasetup.po                  |  43 ++-
  src/auth/authhelper.cpp                       |  34 +-
  src/qml/Backdrop.qml                          | 144 +++++++-
- 13 files changed, 828 insertions(+), 203 deletions(-)
+ 17 files changed, 825 insertions(+), 428 deletions(-)
  rename modules/{wallpaper => appearance}/CMakeLists.txt (56%)
  create mode 100644 modules/appearance/contents/ui/main.qml
  rename modules/{wallpaper => appearance}/metadata.json (50%)
  rename modules/{wallpaper => appearance}/metadata.json.license (100%)
+ delete mode 100644 modules/prepare/CMakeLists.txt
+ delete mode 100644 modules/prepare/contents/ui/main.qml
+ delete mode 100644 modules/prepare/metadata.json
+ delete mode 100644 modules/prepare/metadata.json.license
  delete mode 100644 modules/wallpaper/contents/ui/main.qml
 
 diff --git a/modules/CMakeLists.txt b/modules/CMakeLists.txt
-index cc2f1d8..1bd1e23 100644
+index cc2f1d8..2eb2cbf 100644
 --- a/modules/CMakeLists.txt
 +++ b/modules/CMakeLists.txt
 @@ -5,6 +5,9 @@
@@ -48,19 +57,16 @@ index cc2f1d8..1bd1e23 100644
  add_subdirectory(browser)
  kpackage_install_package(browser org.kde.plasmasetup.browser packages plasma)
  
-@@ -23,8 +26,9 @@ kpackage_install_package(keyboard org.kde.plasmasetup.keyboard packages plasma)
+@@ -23,18 +26,12 @@ kpackage_install_package(keyboard org.kde.plasmasetup.keyboard packages plasma)
  add_subdirectory(language)
  kpackage_install_package(language org.kde.plasmasetup.language packages plasma)
  
 -add_subdirectory(prepare)
 -kpackage_install_package(prepare org.kde.plasmasetup.prepare packages plasma)
-+# The theme switch is on the appearance page
-+# add_subdirectory(prepare)
-+# kpackage_install_package(prepare org.kde.plasmasetup.prepare packages plasma)
- 
+-
  add_subdirectory(time)
  kpackage_install_package(time org.kde.plasmasetup.time packages plasma)
-@@ -32,9 +36,6 @@ kpackage_install_package(time org.kde.plasmasetup.time packages plasma)
+ 
  add_subdirectory(updates)
  kpackage_install_package(updates org.kde.plasmasetup.updates packages plasma)
  
@@ -448,6 +454,254 @@ diff --git a/modules/wallpaper/metadata.json.license b/modules/appearance/metada
 similarity index 100%
 rename from modules/wallpaper/metadata.json.license
 rename to modules/appearance/metadata.json.license
+diff --git a/modules/prepare/CMakeLists.txt b/modules/prepare/CMakeLists.txt
+deleted file mode 100644
+index cc6be45..0000000
+--- a/modules/prepare/CMakeLists.txt
++++ /dev/null
+@@ -1,11 +0,0 @@
+-# SPDX-FileCopyrightText: 2023 Devin Lin <devin@kde.org>
+-# SPDX-FileCopyrightText: 2025 Kristen McWilliam <kristen@kde.org>
+-#
+-# SPDX-License-Identifier: GPL-2.0-or-later
+-
+-ecm_add_qml_module(plasmasetup_prepare
+-    URI "org.kde.plasmasetup.prepare.private"
+-    GENERATE_PLUGIN_SOURCE
+-)
+-
+-ecm_finalize_qml_module(plasmasetup_prepare)
+diff --git a/modules/prepare/contents/ui/main.qml b/modules/prepare/contents/ui/main.qml
+deleted file mode 100644
+index 422088a..0000000
+--- a/modules/prepare/contents/ui/main.qml
++++ /dev/null
+@@ -1,87 +0,0 @@
+-// SPDX-FileCopyrightText: 2023 Devin Lin <devin@kde.org>
+-// SPDX-FileCopyrightText: 2025 Kristen McWilliam <kristen@kde.org>
+-//
+-// SPDX-License-Identifier: GPL-2.0-or-later
+-
+-import QtQuick
+-import QtQuick.Controls
+-import QtQuick.Layouts
+-
+-import org.kde.kirigami as Kirigami
+-import org.kde.kirigamiaddons.formcard as FormCard
+-import org.kde.plasmasetup.prepareutil as Prepare
+-import org.kde.plasmasetup.components as PlasmaSetupComponents
+-
+-PlasmaSetupComponents.SetupModule {
+-    id: root
+-
+-    cardWidth: Math.min(Kirigami.Units.gridUnit * 30, root.contentItem.width - Kirigami.Units.gridUnit * 2)
+-
+-    nextEnabled: true
+-
+-    contentItem: ColumnLayout {
+-
+-        ColumnLayout {
+-            Layout.maximumWidth: root.cardWidth
+-            Layout.alignment: Qt.AlignCenter
+-            spacing: Kirigami.Units.smallSpacing
+-
+-            // TODO: Fix scaling support as seen here: https://invent.kde.org/plasma/plasma-setup/-/merge_requests/56
+-
+-            // Label {
+-            // Layout.leftMargin: Kirigami.Units.gridUnit
+-            // Layout.rightMargin: Kirigami.Units.gridUnit
+-            // Layout.bottomMargin: Kirigami.Units.gridUnit
+-            // Layout.alignment: Qt.AlignTop
+-            // Layout.fillWidth: true
+-
+-            // wrapMode: Text.Wrap
+-            // horizontalAlignment: Text.AlignHCenter
+-            // text: i18n("Adjust the size of elements on the screen.")
+-            // }
+-
+-            // FormCard.FormCard {
+-            // id: scalingCard
+-            // maximumWidth: root.cardWidth
+-
+-            // Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
+-
+-            // FormCard.FormComboBoxDelegate {
+-            // id: displayScaling
+-            // text: i18n("Display Scaling")
+-            // displayMode: FormCard.FormComboBoxDelegate.Dialog
+-            // model: Prepare.PrepareUtil.scalingOptions
+-
+-            // Connections {
+-            // target: Prepare.PrepareUtil
+-
+-            // function onScalingChanged(): void {
+-            // displayScaling.currentIndex = Prepare.PrepareUtil.scalingOptions.indexOf(Prepare.PrepareUtil.scaling.toString() + "%");
+-            // }
+-            // }
+-
+-            // // remove % suffix
+-            // onCurrentValueChanged: Prepare.PrepareUtil.scaling = parseInt(currentValue.substring(0, currentValue.length - 1))
+-            // }
+-            // }
+-
+-                FormCard.FormCard {
+-                    id: darkThemeCard
+-                    maximumWidth: root.cardWidth
+-
+-                    Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
+-
+-                    FormCard.FormSwitchDelegate {
+-                        id: darkThemeSwitch
+-                        text: i18n("Dark Theme")
+-                        checked: Prepare.PrepareUtil.usingDarkTheme
+-                        onCheckedChanged: {
+-                            if (checked !== Prepare.PrepareUtil.usingDarkTheme) {
+-                                Prepare.PrepareUtil.usingDarkTheme = checked;
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-    }
+-}
+diff --git a/modules/prepare/metadata.json b/modules/prepare/metadata.json
+deleted file mode 100644
+index d2cf89f..0000000
+--- a/modules/prepare/metadata.json
++++ /dev/null
+@@ -1,123 +0,0 @@
+-{
+-    "KPackageStructure": "KDE/PlasmaSetup",
+-    "KPlugin": {
+-        "Authors": [
+-            {
+-                "Email": "carl@carlschwan.eu",
+-                "Name": "Carl Schwan",
+-                "Name[ar]": "كارل شوان",
+-                "Name[az]": "Carl Schwan",
+-                "Name[bg]": "Carl Schwan",
+-                "Name[ca@valencia]": "Carl Schwan",
+-                "Name[ca]": "Carl Schwan",
+-                "Name[cs]": "Carl Schwan",
+-                "Name[de]": "Carl Schwan",
+-                "Name[es]": "Carl Schwan",
+-                "Name[eu]": "Carl Schwan",
+-                "Name[fi]": "Carl Schwan",
+-                "Name[fr]": "Carl Schwan",
+-                "Name[ga]": "Carl Schwan",
+-                "Name[gl]": "Carl Schwan",
+-                "Name[he]": "קארל שוואן",
+-                "Name[hu]": "Carl Schwan",
+-                "Name[ia]": "Carl Schwan",
+-                "Name[it]": "Carl Schwan",
+-                "Name[ja]": "Carl Schwan",
+-                "Name[ka]": "Carl Schwan",
+-                "Name[ko]": "Carl Schwan",
+-                "Name[lt]": "Carl Schwan",
+-                "Name[lv]": "Carl Schwan",
+-                "Name[nb]": "Carl Schwan",
+-                "Name[nl]": "Carl Schwan",
+-                "Name[nn]": "Carl Schwan",
+-                "Name[pl]": "Carl Schwan",
+-                "Name[pt_BR]": "Carl Schwan",
+-                "Name[ro]": "Carl Schwan",
+-                "Name[ru]": "Carl Schwan",
+-                "Name[sk]": "Carl Schwan",
+-                "Name[sl]": "Carl Schwan",
+-                "Name[sv]": "Carl Schwan",
+-                "Name[tr]": "Carl Schwan",
+-                "Name[uk]": "Carl Schwan",
+-                "Name[zh_CN]": "Carl Schwan",
+-                "Name[zh_TW]": "Carl Schwan"
+-            }
+-        ],
+-        "Description": "Allows the user to configure the environment before using it.",
+-        "Description[ar]": "يسمح للمستخدم بتهيئة البيئة قبل استخدامها.",
+-        "Description[az]": "İstifadəçiyə mühiti istifadə etmədən öncə onu tənzimləməyə icazə vermək.",
+-        "Description[ca@valencia]": "Permet a l'usuari configurar l'entorn abans d'utilitzar-lo.",
+-        "Description[ca]": "Permet a l'usuari configurar l'entorn abans d'utilitzar-lo.",
+-        "Description[cs]": "Umožní uživateli nastavit prostředí ještě před tím, než je začne používat.",
+-        "Description[de]": "Erlaubt dem Benutzer, die Umgebung vor der Verwendung einzurichten.",
+-        "Description[es]": "Permitir que el usuario configure el entorno antes de usarlo.",
+-        "Description[eu]": "Eman erabiltzaileari erabili aurretik ingurunea konfiguratzeko aukera.",
+-        "Description[fi]": "Sallii käyttäjän asettaa ympäristön ennen sen käyttöä.",
+-        "Description[fr]": "Permettre à l'utilisateur de configurer l'environnement avant de l'utiliser.",
+-        "Description[gl]": "Permite á persoa configurar o contorno antes de usalo.",
+-        "Description[he]": "לאפשר למשתמש להגדיר את הסביבה בטרם השימוש בה.",
+-        "Description[hu]": "A felhasználó beállíthatja a környezetet használat előtt.",
+-        "Description[ia]": "Permitte que le usator configura le ambiente ante usar lo.",
+-        "Description[it]": "Permette all'utente di configurare l'ambiente prima di utilizzarlo.",
+-        "Description[ka]": "მომხმარებლისთვის გარემოს მორგების მის გამოყენებამდე უფლების მიცემა.",
+-        "Description[ko]": "사용자가 시작하기 전에 환경을 설정할 수 있도록 합니다.",
+-        "Description[lt]": "Leisti naudotojui prieš naudojimą susikonfigūruoti aplinką.",
+-        "Description[lv]": "Atļaut lietotājam pirms lietošanas konfigurēt vidi.",
+-        "Description[nb]": "Tillat brukeren å sette opp miljøet før bruk.",
+-        "Description[nl]": "Staat de gebruiker toe de omgeving te configureren alvorens het te gebruiken.",
+-        "Description[nn]": "Tillat brukaren å setja opp skrivebords­miljøet før bruk.",
+-        "Description[pl]": "Zezwól użytkownikowi na ustawienie środowiska przed jego użyciem.",
+-        "Description[pt_BR]": "Permitir que o usuário configure o ambiente antes de utilizá-lo.",
+-        "Description[ro]": "Permite utilizatorului să configureze mediul înainte de a-l folosi.",
+-        "Description[ru]": "Позволяет выполнить настройку пользовательского окружения перед началом использования.",
+-        "Description[sk]": "Umožní používateľovi nastaviť prostredie pred jeho používaním.",
+-        "Description[sl]": "Omogoča uporabniku, da konfigurira okolje pred uporabo.",
+-        "Description[sv]": "Låter användaren ställa in miljön innan den används.",
+-        "Description[tr]": "Kullanıcının onu kullanmadan önce ortamı yapılandırmasına olanak tanır.",
+-        "Description[uk]": "Дозволяє користувачеві налаштовувати середовище до його використання.",
+-        "Description[zh_CN]": "允许用户在使用系统环境之前对其进行配置。",
+-        "Description[zh_TW]": "允許使用者在使用環境前先把它設定好。",
+-        "Id": "org.kde.plasmasetup.prepare",
+-        "License": "LGPL-2.0-or-later",
+-        "Name": "Before we get started…",
+-        "Name[ar]": "قبل أن نبدأ…",
+-        "Name[az]": "Başlamadan öncə...",
+-        "Name[bg]": "Преди да започнем…",
+-        "Name[ca@valencia]": "Abans de començar…",
+-        "Name[ca]": "Abans de començar…",
+-        "Name[cs]": "Ještě než začneme...",
+-        "Name[de]": "Bevor es losgeht …",
+-        "Name[es]": "Antes de empezar…",
+-        "Name[eu]": "Hasi baino lehen...",
+-        "Name[fi]": "Ennen kuin aloitetaan…",
+-        "Name[fr]": "Avant de commencer…",
+-        "Name[gl]": "Antes de comezar…",
+-        "Name[he]": "לפני שנתחיל…",
+-        "Name[hu]": "Mielőtt elkezdenénk…",
+-        "Name[ia]": "Ante que nos initia ...",
+-        "Name[it]": "Prima di iniziare...",
+-        "Name[ja]": "はじめる前に…",
+-        "Name[ka]": "სანამ დავიწყებთ…",
+-        "Name[ko]": "시작하기 전에…",
+-        "Name[lt]": "Prieš pradedant…",
+-        "Name[lv]": "Pirms sākam…",
+-        "Name[nb]": "Før vi kommer i gang …",
+-        "Name[nl]": "Voordat we verder gaan…",
+-        "Name[nn]": "Før me set i gang …",
+-        "Name[pl]": "Zanim zaczniemy…",
+-        "Name[pt_BR]": "Antes de começarmos…",
+-        "Name[ro]": "Înainte să începem…",
+-        "Name[ru]": "До начала работы…",
+-        "Name[sk]": "Skôr než začneme…",
+-        "Name[sl]": "Preden začnemo…",
+-        "Name[sv]": "Innan vi kommer igång …",
+-        "Name[tr]": "Başlamadan Önce…",
+-        "Name[uk]": "Перш, ніж ми почнемо.",
+-        "Name[zh_CN]": "在开始之前…",
+-        "Name[zh_TW]": "開始之前…",
+-        "Version": "1.0"
+-    },
+-    "NoDisplay": true,
+-    "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 10
+-}
+diff --git a/modules/prepare/metadata.json.license b/modules/prepare/metadata.json.license
+deleted file mode 100644
+index 977b65c..0000000
+--- a/modules/prepare/metadata.json.license
++++ /dev/null
+@@ -1,3 +0,0 @@
+-SPDX-FileCopyrightText: 2025 Carl Schwan <carl@carlschwan.eu>
+-SPDX-FileCopyrightText: 2025 Kristen McWilliam <kristen@kde.org>
+-SPDX-License-Identifier: LGPL-2.0-or-later
 diff --git a/modules/prepareutil/prepareutil.cpp b/modules/prepareutil/prepareutil.cpp
 index f818277..9045803 100644
 --- a/modules/prepareutil/prepareutil.cpp

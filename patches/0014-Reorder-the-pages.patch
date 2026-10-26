@@ -1,0 +1,128 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Mon, 26 Oct 2026 16:02:34 +0100
+Subject: [PATCH 14/15] Reorder the pages
+
+---
+ docs/CUSTOM_MODULES.md           | 12 ++++++++----
+ modules/account/metadata.json    |  2 +-
+ modules/appearance/metadata.json |  2 +-
+ modules/browser/metadata.json    |  2 +-
+ modules/encryption/metadata.json |  2 +-
+ modules/hostname/metadata.json   |  2 +-
+ modules/time/metadata.json       |  2 +-
+ modules/updates/metadata.json    |  2 +-
+ modules/wifi/metadata.json       |  2 +-
+ 9 files changed, 16 insertions(+), 12 deletions(-)
+
+diff --git a/docs/CUSTOM_MODULES.md b/docs/CUSTOM_MODULES.md
+index 13a67b1..c3e706b 100644
+--- a/docs/CUSTOM_MODULES.md
++++ b/docs/CUSTOM_MODULES.md
+@@ -68,10 +68,14 @@ sequence. Lower numbers appear earlier. Reference values from built-in modules:
+ 
+ - `0` - Language selection (first page)
+ - `5` - Keyboard layout
+-- `10` - Prepare (display scaling, theme)
+-- `20` - Account creation
+-- `40` - Time zone
+-- `50` - WiFi configuration
++- `10` - Hostname
++- `20` - Time zone
++- `30` - Disk encryption
++- `40` - WiFi configuration
++- `50` - Updates
++- `55` - Web browsers
++- `60` - Account creation
++- `70` - Appearance (theme, accent colour, wallpaper)
+ - `200` - Finished (final page)
+ 
+ Choose a weight value between existing modules to position your custom page
+diff --git a/modules/account/metadata.json b/modules/account/metadata.json
+index c10c7be..8fd910f 100644
+--- a/modules/account/metadata.json
++++ b/modules/account/metadata.json
+@@ -119,5 +119,5 @@
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 20
++    "X-KDE-Weight": 60
+ }
+diff --git a/modules/appearance/metadata.json b/modules/appearance/metadata.json
+index 75f5231..3441220 100644
+--- a/modules/appearance/metadata.json
++++ b/modules/appearance/metadata.json
+@@ -17,5 +17,5 @@
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 10
++    "X-KDE-Weight": 70
+ }
+diff --git a/modules/browser/metadata.json b/modules/browser/metadata.json
+index 559bc54..a3731d2 100644
+--- a/modules/browser/metadata.json
++++ b/modules/browser/metadata.json
+@@ -17,5 +17,5 @@
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 57
++    "X-KDE-Weight": 55
+ }
+diff --git a/modules/encryption/metadata.json b/modules/encryption/metadata.json
+index a939cb9..f62470a 100644
+--- a/modules/encryption/metadata.json
++++ b/modules/encryption/metadata.json
+@@ -17,5 +17,5 @@
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 58
++    "X-KDE-Weight": 30
+ }
+diff --git a/modules/hostname/metadata.json b/modules/hostname/metadata.json
+index e53e6ec..6110966 100644
+--- a/modules/hostname/metadata.json
++++ b/modules/hostname/metadata.json
+@@ -117,5 +117,5 @@
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 30
++    "X-KDE-Weight": 10
+ }
+diff --git a/modules/time/metadata.json b/modules/time/metadata.json
+index 5b9a186..73bd1af 100644
+--- a/modules/time/metadata.json
++++ b/modules/time/metadata.json
+@@ -160,5 +160,5 @@
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 40
++    "X-KDE-Weight": 20
+ }
+diff --git a/modules/updates/metadata.json b/modules/updates/metadata.json
+index 486c6c7..cdf14e4 100644
+--- a/modules/updates/metadata.json
++++ b/modules/updates/metadata.json
+@@ -17,5 +17,5 @@
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 55
++    "X-KDE-Weight": 50
+ }
+diff --git a/modules/wifi/metadata.json b/modules/wifi/metadata.json
+index cc877f6..25674f6 100644
+--- a/modules/wifi/metadata.json
++++ b/modules/wifi/metadata.json
+@@ -119,5 +119,5 @@
+     },
+     "NoDisplay": true,
+     "X-KDE-ParentApp": "org.kde.plasmasetup",
+-    "X-KDE-Weight": 50
++    "X-KDE-Weight": 40
+ }
