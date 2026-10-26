@@ -1542,7 +1542,7 @@ index 02b010e..a2916b3 100644
 +                    id: fadeIn
 +                    property: "opacity"
 +                    to: 1
-+                    duration: 5000
++                    duration: 3000
 +                    easing.type: Easing.InOutQuad
 +                }
 +
@@ -1550,7 +1550,7 @@ index 02b010e..a2916b3 100644
 +                    id: fadeOut
 +                    property: "opacity"
 +                    to: 0
-+                    duration: 5000
++                    duration: 3000
 +                    easing.type: Easing.InOutQuad
 +                }
 +
