@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Tue, 27 Oct 2026 02:55:53 +0100
-Subject: [PATCH 16/17] Add a page that restores a BlossomOS Switch backup
+Subject: [PATCH 16/18] Add a page that restores a BlossomOS Switch backup
 
 ---
  docs/CUSTOM_MODULES.md                  |   5 +-

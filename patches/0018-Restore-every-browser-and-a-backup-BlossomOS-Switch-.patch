@@ -1,0 +1,1984 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Wed, 28 Oct 2026 08:39:26 +0100
+Subject: [PATCH 18/18] Restore every browser and a backup BlossomOS Switch
+ left on this computer
+
+---
+ modules/appearance/contents/ui/main.qml |  8 +-
+ modules/switch/contents/ui/main.qml     | 43 ++++++++++-
+ modules/switchutil/switchutil.cpp       | 99 ++++++++++++++++++++++---
+ modules/switchutil/switchutil.h         | 11 +++
+ po/ar/org.kde.plasmasetup.po            | 32 ++++++++
+ po/az/org.kde.plasmasetup.po            | 32 ++++++++
+ po/ca/org.kde.plasmasetup.po            | 32 ++++++++
+ po/ca@valencia/org.kde.plasmasetup.po   | 32 ++++++++
+ po/cs/org.kde.plasmasetup.po            | 32 ++++++++
+ po/de/org.kde.plasmasetup.po            | 32 ++++++++
+ po/en_GB/org.kde.plasmasetup.po         | 32 ++++++++
+ po/es/org.kde.plasmasetup.po            | 32 ++++++++
+ po/eu/org.kde.plasmasetup.po            | 32 ++++++++
+ po/fi/org.kde.plasmasetup.po            | 32 ++++++++
+ po/fr/org.kde.plasmasetup.po            | 32 ++++++++
+ po/ga/org.kde.plasmasetup.po            | 32 ++++++++
+ po/gl/org.kde.plasmasetup.po            | 32 ++++++++
+ po/he/org.kde.plasmasetup.po            | 32 ++++++++
+ po/hu/org.kde.plasmasetup.po            | 32 ++++++++
+ po/ia/org.kde.plasmasetup.po            | 32 ++++++++
+ po/it/org.kde.plasmasetup.po            | 32 ++++++++
+ po/ja/org.kde.plasmasetup.po            | 32 ++++++++
+ po/ka/org.kde.plasmasetup.po            | 32 ++++++++
+ po/ko/org.kde.plasmasetup.po            | 32 ++++++++
+ po/lt/org.kde.plasmasetup.po            | 32 ++++++++
+ po/lv/org.kde.plasmasetup.po            | 32 ++++++++
+ po/nb/org.kde.plasmasetup.po            | 32 ++++++++
+ po/nl/org.kde.plasmasetup.po            | 32 ++++++++
+ po/nn/org.kde.plasmasetup.po            | 32 ++++++++
+ po/pl/org.kde.plasmasetup.po            | 32 ++++++++
+ po/pt_BR/org.kde.plasmasetup.po         | 32 ++++++++
+ po/ro/org.kde.plasmasetup.po            | 32 ++++++++
+ po/ru/org.kde.plasmasetup.po            | 32 ++++++++
+ po/sk/org.kde.plasmasetup.po            | 32 ++++++++
+ po/sl/org.kde.plasmasetup.po            | 32 ++++++++
+ po/sv/org.kde.plasmasetup.po            | 32 ++++++++
+ po/tr/org.kde.plasmasetup.po            | 32 ++++++++
+ po/uk/org.kde.plasmasetup.po            | 32 ++++++++
+ po/zh_CN/org.kde.plasmasetup.po         | 32 ++++++++
+ po/zh_TW/org.kde.plasmasetup.po         | 32 ++++++++
+ src/auth/authhelper.cpp                 | 33 ++++++---
+ 41 files changed, 1323 insertions(+), 23 deletions(-)
+
+diff --git a/modules/appearance/contents/ui/main.qml b/modules/appearance/contents/ui/main.qml
+index 2df5223..6389f99 100644
+--- a/modules/appearance/contents/ui/main.qml
++++ b/modules/appearance/contents/ui/main.qml
+@@ -42,10 +42,16 @@ PlasmaSetupComponents.SetupModule {
+     property bool prefilled: false
+ 
+     function onPageActivated(): void {
+-        if (prefilled || Switch.SwitchUtil.profileAccent === "" || Prepare.PrepareUtil.accentColor !== "") {
++        if (prefilled || Switch.SwitchUtil.state !== Switch.SwitchUtil.Done) {
+             return;
+         }
+         prefilled = true;
++        if (Switch.SwitchUtil.profileDark !== -1 && Prepare.PrepareUtil.usingDarkTheme !== (Switch.SwitchUtil.profileDark === 1)) {
++            Prepare.PrepareUtil.usingDarkTheme = Switch.SwitchUtil.profileDark === 1;
++        }
++        if (Switch.SwitchUtil.profileAccent === "" || Prepare.PrepareUtil.accentColor !== "") {
++            return;
++        }
+         const wanted = Qt.color(Switch.SwitchUtil.profileAccent);
+         let nearest = accentPalette[0];
+         let best = Infinity;
+diff --git a/modules/switch/contents/ui/main.qml b/modules/switch/contents/ui/main.qml
+index a16fb7e..8b61424 100644
+--- a/modules/switch/contents/ui/main.qml
++++ b/modules/switch/contents/ui/main.qml
+@@ -36,7 +36,7 @@ PlasmaSetupComponents.SetupModule {
+         if (!online && mode === Switch.SwitchUtil.Network) {
+             Switch.SwitchUtil.mode = Switch.SwitchUtil.None;
+         }
+-        if (mode === Switch.SwitchUtil.External) {
++        if (mode === Switch.SwitchUtil.External || mode === Switch.SwitchUtil.Local) {
+             Switch.SwitchUtil.refreshBackups();
+         }
+     }
+@@ -71,6 +71,22 @@ PlasmaSetupComponents.SetupModule {
+         }
+     }
+ 
++    component SwitchLink: Label {
++        Layout.fillWidth: true
++        Layout.leftMargin: Kirigami.Units.gridUnit
++        Layout.rightMargin: Kirigami.Units.gridUnit
++        horizontalAlignment: Text.AlignHCenter
++        wrapMode: Text.Wrap
++        opacity: 0.75
++        textFormat: Text.StyledText
++        text: i18nc("%1 is a link", "You can get BlossomOS Switch for your Windows computer at %1.", "<a href=\"https://blossom.computer/switch\">blossom.computer/switch</a>")
++        onLinkActivated: link => Qt.openUrlExternally(link)
++
++        HoverHandler {
++            cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
++        }
++    }
++
+     component OptionRow: AbstractButton {
+         id: row
+ 
+@@ -143,7 +159,7 @@ PlasmaSetupComponents.SetupModule {
+     }
+ 
+     contentItem: StackLayout {
+-        currentIndex: root.mode === Switch.SwitchUtil.External || root.mode === Switch.SwitchUtil.Network || root.done ? 1 : 0
++        currentIndex: root.mode === Switch.SwitchUtil.External || root.mode === Switch.SwitchUtil.Network || root.mode === Switch.SwitchUtil.Local || root.done ? 1 : 0
+ 
+         ColumnLayout {
+             spacing: Kirigami.Units.largeSpacing
+@@ -169,6 +185,8 @@ PlasmaSetupComponents.SetupModule {
+                 text: i18n("Did you save your files with BlossomOS Switch on your old computer? Then you can bring them along with your apps and settings.")
+             }
+ 
++            SwitchLink {}
++
+             ColumnLayout {
+                 Layout.alignment: Qt.AlignHCenter
+                 Layout.fillWidth: true
+@@ -176,6 +194,14 @@ PlasmaSetupComponents.SetupModule {
+                 Layout.topMargin: Kirigami.Units.largeSpacing
+                 spacing: Kirigami.Units.smallSpacing
+ 
++                OptionRow {
++                    visible: Switch.SwitchUtil.hasLocalBackup
++                    option: Switch.SwitchUtil.Local
++                    iconName: "drive-harddisk"
++                    text: i18n("Copy the backup on this computer")
++                    subtitle: i18n("BlossomOS Switch brought it along during the installation")
++                }
++
+                 OptionRow {
+                     option: Switch.SwitchUtil.External
+                     iconName: "drive-removable-media"
+@@ -219,6 +245,7 @@ PlasmaSetupComponents.SetupModule {
+                 level: 2
+                 text: root.done ? i18n("Your Files Are Here")
+                     : root.mode === Switch.SwitchUtil.Network ? i18n("Connect Your Old Computer")
++                    : root.mode === Switch.SwitchUtil.Local ? i18n("Your Backup Is Already Here")
+                     : i18n("Pick Your Backup")
+             }
+ 
+@@ -230,6 +257,7 @@ PlasmaSetupComponents.SetupModule {
+                 wrapMode: Text.Wrap
+                 text: root.done ? i18n("Your files from %1 are ready. They move into your home folder once setup is done.", Switch.SwitchUtil.source)
+                     : root.mode === Switch.SwitchUtil.Network ? i18n("Open BlossomOS Switch on your Windows computer, choose \"%1\" and enter this PIN:", Switch.SwitchUtil.hostName)
++                    : root.mode === Switch.SwitchUtil.Local ? i18n("BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it.")
+                     : Switch.SwitchUtil.backups.length === 0 ? i18n("Connect the USB stick or drive with your backup.")
+                     : i18n("Enter the PIN you wrote down when you made the backup.")
+             }
+@@ -238,7 +266,7 @@ PlasmaSetupComponents.SetupModule {
+                 Layout.alignment: Qt.AlignHCenter
+                 Layout.fillWidth: true
+                 Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+-                visible: root.mode === Switch.SwitchUtil.External && !root.done
++                visible: (root.mode === Switch.SwitchUtil.External || root.mode === Switch.SwitchUtil.Local) && !root.done
+                 spacing: Kirigami.Units.smallSpacing
+ 
+                 BusyIndicator {
+@@ -247,6 +275,10 @@ PlasmaSetupComponents.SetupModule {
+                     running: visible
+                 }
+ 
++                SwitchLink {
++                    visible: root.mode === Switch.SwitchUtil.External && Switch.SwitchUtil.backups.length === 0
++                }
++
+                 Repeater {
+                     model: Switch.SwitchUtil.backups
+ 
+@@ -254,6 +286,7 @@ PlasmaSetupComponents.SetupModule {
+                         required property var modelData
+ 
+                         Layout.fillWidth: true
++                        visible: root.mode !== Switch.SwitchUtil.Local || Switch.SwitchUtil.backups.length > 1
+                         enabled: !root.working
+                         checked: root.selectedBackup === modelData.path
+                         onToggled: root.selectedBackup = modelData.path
+@@ -301,6 +334,10 @@ PlasmaSetupComponents.SetupModule {
+                 text: Switch.SwitchUtil.pin
+             }
+ 
++            SwitchLink {
++                visible: root.mode === Switch.SwitchUtil.Network && !root.done
++            }
++
+             Item {
+                 Layout.alignment: Qt.AlignHCenter
+                 Layout.fillWidth: true
+diff --git a/modules/switchutil/switchutil.cpp b/modules/switchutil/switchutil.cpp
+index 76e54d1..d12caa5 100644
+--- a/modules/switchutil/switchutil.cpp
++++ b/modules/switchutil/switchutil.cpp
+@@ -44,6 +44,7 @@ namespace
+ constexpr auto HELPER_ID = "org.kde.plasmasetup";
+ constexpr auto STAGING_DIR = "/var/home/.blossomos-switch";
+ constexpr auto BACKUP_DIR = "BlossomOS Switch";
++constexpr auto LOCAL_DIR = "/var/lib/switch";
+ constexpr auto SERVICE_TYPE = "_blossomswitch._tcp";
+ constexpr quint16 PORT = 47120;
+ constexpr qint64 SPARE_SPACE = 1024LL * 1024 * 1024;
+@@ -54,6 +55,12 @@ bool preview()
+     return qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1;
+ }
+ 
++QString localDir()
++{
++    const QString previewDir = qEnvironmentVariable("PLASMA_SETUP_PREVIEW_SWITCH_LOCAL");
++    return preview() ? previewDir : QLatin1String(LOCAL_DIR);
++}
++
+ QString stagingDir()
+ {
+     return preview() ? QString(QDir::tempPath() + "/blossomos-switch-preview"_L1) : QLatin1String(STAGING_DIR);
+@@ -166,7 +173,11 @@ SwitchUtil::SwitchUtil(QObject *parent)
+     connect(this, &SwitchUtil::stateChanged, this, &SwitchUtil::stepsChanged);
+     connect(this, &SwitchUtil::progressChanged, this, &SwitchUtil::stepsChanged);
+     connect(this, &SwitchUtil::appsChanged, this, &SwitchUtil::stepsChanged);
++    refreshLocalBackups();
+     resume();
++    if (m_mode == None && m_state == Idle && hasLocalBackup()) {
++        setMode(Local);
++    }
+ }
+ 
+ SwitchUtil::~SwitchUtil()
+@@ -205,7 +216,7 @@ void SwitchUtil::setMode(Mode mode)
+     setState(Idle);
+     Q_EMIT modeChanged();
+ 
+-    if (m_mode == External) {
++    if (m_mode == External || m_mode == Local) {
+         refreshBackups();
+     } else if (m_mode == Network) {
+         startNetwork();
+@@ -263,9 +274,20 @@ int SwitchUtil::appsFailed() const
+     return m_appsFailed;
+ }
+ 
++QString SwitchUtil::defaultBrowser() const
++{
++    for (const QJsonValue &value : m_manifest.value("browsers"_L1).toArray()) {
++        const QJsonObject browser = value.toObject();
++        if (browser.value("default"_L1).toBool() && validAppId(browser.value("flatpak"_L1).toString())) {
++            return browser.value("flatpak"_L1).toString();
++        }
++    }
++    return {};
++}
++
+ bool SwitchUtil::providesBrowser() const
+ {
+-    return m_state == Done && validAppId(m_manifest.value("browser"_L1).toObject().value("flatpak"_L1).toString());
++    return m_state == Done && !defaultBrowser().isEmpty();
+ }
+ 
+ QVariantList SwitchUtil::steps() const
+@@ -356,6 +378,29 @@ QString SwitchUtil::profileAccent() const
+     return color.match(accent).hasMatch() ? accent.toLower() : QString();
+ }
+ 
++int SwitchUtil::profileDark() const
++{
++    const QJsonValue dark = m_state == Done ? m_manifest.value("profile"_L1).toObject().value("dark"_L1) : QJsonValue();
++    return dark.isBool() ? int(dark.toBool()) : -1;
++}
++
++bool SwitchUtil::hasLocalBackup() const
++{
++    return !m_localBackups.isEmpty();
++}
++
++void SwitchUtil::refreshLocalBackups()
++{
++    const QVariantList previous = m_localBackups;
++    m_localBackups.clear();
++    if (!localDir().isEmpty()) {
++        scanDir(localDir(), i18nc("@item where a backup is stored", "This computer"), m_localBackups);
++    }
++    if (m_localBackups != previous) {
++        Q_EMIT localBackupsChanged();
++    }
++}
++
+ QUrl SwitchUtil::wallpaper() const
+ {
+     return m_state == Done ? stagedFile(m_manifest.value("wallpaper"_L1).toString(), u"wallpaper"_s) : QUrl();
+@@ -441,6 +486,7 @@ void SwitchUtil::prepareStaging(const std::function<void(bool)> &then)
+     }
+     KAuth::Action action(u"org.kde.plasmasetup.prepareswitch"_s);
+     action.setHelperId(QLatin1String(HELPER_ID));
++    action.setArguments({{u"local"_s, m_mode == Local}});
+     KAuth::ExecuteJob *job = action.execute();
+     connect(job, &KJob::result, this, [this, job, then] {
+         if (job->error()) {
+@@ -469,6 +515,14 @@ void SwitchUtil::refreshBackups()
+ {
+     QVariantList previous = m_backups;
+     m_backups.clear();
++    if (m_mode == Local) {
++        refreshLocalBackups();
++        m_backups = m_localBackups;
++        if (m_backups != previous) {
++            Q_EMIT backupsChanged();
++        }
++        return;
++    }
+     const QList<Solid::Device> devices = Solid::Device::listFromType(Solid::DeviceInterface::StorageAccess);
+     for (Solid::Device device : devices) {
+         const auto *volume = device.as<Solid::StorageVolume>();
+@@ -494,8 +548,13 @@ void SwitchUtil::refreshBackups()
+ 
+ void SwitchUtil::scan(const QString &root, const QString &drive)
+ {
+-    const QDir dir(root + QLatin1Char('/') + QLatin1String(BACKUP_DIR));
+-    const QFileInfoList entries = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed);
++    scanDir(root + QLatin1Char('/') + QLatin1String(BACKUP_DIR), drive, m_backups);
++}
++
++void SwitchUtil::scanDir(const QString &path, const QString &drive, QVariantList &backups) const
++{
++    const QDir dir(path);
++    const QFileInfoList entries = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::Name | QDir::Reversed);
+     for (const QFileInfo &entry : entries) {
+         QFile file(entry.absoluteFilePath() + "/switch.json"_L1);
+         if (!file.open(QIODevice::ReadOnly) || file.size() > MAX_LINE) {
+@@ -505,7 +564,7 @@ void SwitchUtil::scan(const QString &root, const QString &drive)
+         if (info.value("format"_L1).toString() != "blossomos-switch"_L1 || info.value("version"_L1).toInt() != 1) {
+             continue;
+         }
+-        m_backups << QVariantMap{
++        backups << QVariantMap{
+             {u"path"_s, entry.absoluteFilePath()},
+             {u"computer"_s, info.value("computer"_L1).toString().left(64)},
+             {u"created"_s, QDateTime::fromString(info.value("created"_L1).toString(), Qt::ISODate)},
+@@ -517,9 +576,18 @@ void SwitchUtil::scan(const QString &root, const QString &drive)
+ 
+ void SwitchUtil::restore(const QString &path, const QString &pin)
+ {
+-    if (m_mode != External || m_worker || m_state == Checking || m_state == Copying || m_state == Done || pin.size() != 6) {
++    if ((m_mode != External && m_mode != Local) || m_worker || m_state == Checking || m_state == Copying || m_state == Done || pin.size() != 6) {
+         return;
+     }
++    if (m_mode == Local) {
++        const bool known = std::any_of(m_localBackups.cbegin(), m_localBackups.cend(), [&path](const QVariant &backup) {
++            return backup.toMap().value(u"path"_s).toString() == path;
++        });
++        if (!known) {
++            return;
++        }
++    }
++    m_restorePath = m_mode == Local ? path : QString();
+     setState(Checking);
+     prepareStaging([this, path, pin](bool ready) {
+         if (!ready) {
+@@ -619,6 +687,10 @@ void SwitchUtil::restoreBackup(const QString &path, const QByteArray &pin)
+         return;
+     }
+     const QJsonObject manifest = extractor.manifest();
++    current.close();
++    if (!preview() && !m_restorePath.isEmpty() && m_restorePath == path && !QDir(path).removeRecursively()) {
++        qWarning() << "Failed to remove the restored backup at" << path;
++    }
+     QMetaObject::invokeMethod(this, [this, manifest] {
+         finishRestore(manifest);
+     });
+@@ -850,7 +922,8 @@ void SwitchUtil::resume()
+         return;
+     }
+     const auto group = KSharedConfig::openConfig(u"plasma-setuprc"_s)->group(u"Switch"_s);
+-    m_mode = group.readEntry("Mode", int(External)) == int(Network) ? Network : External;
++    const int savedMode = group.readEntry("Mode", int(External));
++    m_mode = savedMode == int(Network) ? Network : savedMode == int(Local) ? Local : External;
+     m_stagingReady = true;
+     m_useWallpaper = group.readEntry("Wallpaper", true);
+     finishRestore(manifest);
+@@ -864,7 +937,7 @@ void SwitchUtil::save() const
+     group.writeEntry("Restore", m_state == Done && m_mode != Fresh);
+     group.writeEntry("Wallpaper", m_useWallpaper);
+     if (providesBrowser()) {
+-        config->group(u"Browser"_s).writeEntry("Default", m_manifest.value("browser"_L1).toObject().value("flatpak"_L1).toString());
++        config->group(u"Browser"_s).writeEntry("Default", defaultBrowser());
+     }
+     config->sync();
+ }
+@@ -880,8 +953,14 @@ void SwitchUtil::startApps()
+             m_apps << App{id, name.simplified().isEmpty() ? id : name.simplified().left(80), u"waiting"_s, 0, QString()};
+         }
+     };
+-    const QJsonObject browser = m_manifest.value("browser"_L1).toObject();
+-    add(browser.value("flatpak"_L1).toString(), browser.value("name"_L1).toString());
++    for (const QJsonValue &value : m_manifest.value("browsers"_L1).toArray()) {
++        if (value.toObject().value("default"_L1).toBool()) {
++            add(value.toObject().value("flatpak"_L1).toString(), value.toObject().value("name"_L1).toString());
++        }
++    }
++    for (const QJsonValue &value : m_manifest.value("browsers"_L1).toArray()) {
++        add(value.toObject().value("flatpak"_L1).toString(), value.toObject().value("name"_L1).toString());
++    }
+     for (const QJsonValue &value : m_manifest.value("apps"_L1).toArray()) {
+         add(value.toObject().value("flatpak"_L1).toString(), value.toObject().value("name"_L1).toString());
+     }
+diff --git a/modules/switchutil/switchutil.h b/modules/switchutil/switchutil.h
+index b3fe323..ebcfadc 100644
+--- a/modules/switchutil/switchutil.h
++++ b/modules/switchutil/switchutil.h
+@@ -47,6 +47,8 @@ class SwitchUtil : public QObject
+     Q_PROPERTY(QString profileHostname READ profileHostname NOTIFY stateChanged)
+     Q_PROPERTY(QUrl profilePicture READ profilePicture NOTIFY stateChanged)
+     Q_PROPERTY(QString profileAccent READ profileAccent NOTIFY stateChanged)
++    Q_PROPERTY(int profileDark READ profileDark NOTIFY stateChanged)
++    Q_PROPERTY(bool hasLocalBackup READ hasLocalBackup NOTIFY localBackupsChanged)
+     Q_PROPERTY(QUrl wallpaper READ wallpaper NOTIFY stateChanged)
+     Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged)
+     Q_PROPERTY(QVariantList steps READ steps NOTIFY stepsChanged)
+@@ -58,6 +60,7 @@ public:
+         External,
+         Network,
+         Fresh,
++        Local,
+     };
+     Q_ENUM(Mode)
+ 
+@@ -94,6 +97,8 @@ public:
+     QString profileHostname() const;
+     QUrl profilePicture() const;
+     QString profileAccent() const;
++    int profileDark() const;
++    bool hasLocalBackup() const;
+     QUrl wallpaper() const;
+     bool useWallpaper() const;
+     void setUseWallpaper(bool use);
+@@ -114,6 +119,7 @@ Q_SIGNALS:
+     void appsChanged();
+     void useWallpaperChanged();
+     void stepsChanged();
++    void localBackupsChanged();
+ 
+ private:
+     void setState(State state);
+@@ -132,12 +138,17 @@ private:
+     void startApps();
+     void installNext();
+     void scan(const QString &root, const QString &drive);
++    void scanDir(const QString &dir, const QString &drive, QVariantList &backups) const;
++    void refreshLocalBackups();
+     void runWorker(const std::function<void()> &work);
+     QUrl stagedFile(const QString &path, const QString &folder) const;
++    QString defaultBrowser() const;
+ 
+     Mode m_mode = None;
+     State m_state = Idle;
+     QVariantList m_backups;
++    QVariantList m_localBackups;
++    QString m_restorePath;
+     QString m_pin;
+     QString m_peer;
+     QString m_source;
+diff --git a/po/ar/org.kde.plasmasetup.po b/po/ar/org.kde.plasmasetup.po
+index 63037b2..4e7eef7 100644
+--- a/po/ar/org.kde.plasmasetup.po
++++ b/po/ar/org.kde.plasmasetup.po
+@@ -778,3 +778,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/az/org.kde.plasmasetup.po b/po/az/org.kde.plasmasetup.po
+index dbfdd39..b1cde92 100644
+--- a/po/az/org.kde.plasmasetup.po
++++ b/po/az/org.kde.plasmasetup.po
+@@ -744,3 +744,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ca/org.kde.plasmasetup.po b/po/ca/org.kde.plasmasetup.po
+index 8068a68..3de528e 100644
+--- a/po/ca/org.kde.plasmasetup.po
++++ b/po/ca/org.kde.plasmasetup.po
+@@ -666,3 +666,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ca@valencia/org.kde.plasmasetup.po b/po/ca@valencia/org.kde.plasmasetup.po
+index a10388e..e225bd4 100644
+--- a/po/ca@valencia/org.kde.plasmasetup.po
++++ b/po/ca@valencia/org.kde.plasmasetup.po
+@@ -669,3 +669,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/cs/org.kde.plasmasetup.po b/po/cs/org.kde.plasmasetup.po
+index 4af7cf5..adff5da 100644
+--- a/po/cs/org.kde.plasmasetup.po
++++ b/po/cs/org.kde.plasmasetup.po
+@@ -666,3 +666,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index 6564bbd..6a16ce2 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -1001,3 +1001,35 @@ msgstr "Wähle dein Backup"
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr "Andere Option wählen"
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr "BlossomOS Switch für deinen Windows Computer bekommst du auf %1."
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr "Backup auf diesem Computer kopieren"
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr "BlossomOS Switch hat es bei der Installation mitgebracht"
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr "Dein Backup ist schon da"
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr "BlossomOS Switch hat dein Backup bei der Installation mitgebracht. Gib die PIN ein, die du dir beim Erstellen notiert hast."
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr "Dieser Computer"
+diff --git a/po/en_GB/org.kde.plasmasetup.po b/po/en_GB/org.kde.plasmasetup.po
+index b910634..5c92e1e 100644
+--- a/po/en_GB/org.kde.plasmasetup.po
++++ b/po/en_GB/org.kde.plasmasetup.po
+@@ -712,3 +712,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/es/org.kde.plasmasetup.po b/po/es/org.kde.plasmasetup.po
+index d177184..a775e1b 100644
+--- a/po/es/org.kde.plasmasetup.po
++++ b/po/es/org.kde.plasmasetup.po
+@@ -669,3 +669,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/eu/org.kde.plasmasetup.po b/po/eu/org.kde.plasmasetup.po
+index 4ea78c4..24f2817 100644
+--- a/po/eu/org.kde.plasmasetup.po
++++ b/po/eu/org.kde.plasmasetup.po
+@@ -808,3 +808,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/fi/org.kde.plasmasetup.po b/po/fi/org.kde.plasmasetup.po
+index 759726a..937f1b9 100644
+--- a/po/fi/org.kde.plasmasetup.po
++++ b/po/fi/org.kde.plasmasetup.po
+@@ -806,3 +806,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/fr/org.kde.plasmasetup.po b/po/fr/org.kde.plasmasetup.po
+index 867ff9a..2474341 100644
+--- a/po/fr/org.kde.plasmasetup.po
++++ b/po/fr/org.kde.plasmasetup.po
+@@ -826,3 +826,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ga/org.kde.plasmasetup.po b/po/ga/org.kde.plasmasetup.po
+index a079225..12d30db 100644
+--- a/po/ga/org.kde.plasmasetup.po
++++ b/po/ga/org.kde.plasmasetup.po
+@@ -658,3 +658,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/gl/org.kde.plasmasetup.po b/po/gl/org.kde.plasmasetup.po
+index 9340c8e..59eea55 100644
+--- a/po/gl/org.kde.plasmasetup.po
++++ b/po/gl/org.kde.plasmasetup.po
+@@ -825,3 +825,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/he/org.kde.plasmasetup.po b/po/he/org.kde.plasmasetup.po
+index e965eb2..b4acd4e 100644
+--- a/po/he/org.kde.plasmasetup.po
++++ b/po/he/org.kde.plasmasetup.po
+@@ -743,3 +743,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/hu/org.kde.plasmasetup.po b/po/hu/org.kde.plasmasetup.po
+index bde211c..e1e24e7 100644
+--- a/po/hu/org.kde.plasmasetup.po
++++ b/po/hu/org.kde.plasmasetup.po
+@@ -664,3 +664,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ia/org.kde.plasmasetup.po b/po/ia/org.kde.plasmasetup.po
+index 141eeed..96810db 100644
+--- a/po/ia/org.kde.plasmasetup.po
++++ b/po/ia/org.kde.plasmasetup.po
+@@ -782,3 +782,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/it/org.kde.plasmasetup.po b/po/it/org.kde.plasmasetup.po
+index f949d68..291e0f1 100644
+--- a/po/it/org.kde.plasmasetup.po
++++ b/po/it/org.kde.plasmasetup.po
+@@ -820,3 +820,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ja/org.kde.plasmasetup.po b/po/ja/org.kde.plasmasetup.po
+index 58901c6..e7a05f1 100644
+--- a/po/ja/org.kde.plasmasetup.po
++++ b/po/ja/org.kde.plasmasetup.po
+@@ -658,3 +658,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ka/org.kde.plasmasetup.po b/po/ka/org.kde.plasmasetup.po
+index d11a458..6c0721a 100644
+--- a/po/ka/org.kde.plasmasetup.po
++++ b/po/ka/org.kde.plasmasetup.po
+@@ -776,3 +776,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ko/org.kde.plasmasetup.po b/po/ko/org.kde.plasmasetup.po
+index 896796e..4a3dd1d 100644
+--- a/po/ko/org.kde.plasmasetup.po
++++ b/po/ko/org.kde.plasmasetup.po
+@@ -799,3 +799,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/lt/org.kde.plasmasetup.po b/po/lt/org.kde.plasmasetup.po
+index ce00599..d7ffcac 100644
+--- a/po/lt/org.kde.plasmasetup.po
++++ b/po/lt/org.kde.plasmasetup.po
+@@ -674,3 +674,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/lv/org.kde.plasmasetup.po b/po/lv/org.kde.plasmasetup.po
+index 8149c65..417d9bb 100644
+--- a/po/lv/org.kde.plasmasetup.po
++++ b/po/lv/org.kde.plasmasetup.po
+@@ -751,3 +751,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/nb/org.kde.plasmasetup.po b/po/nb/org.kde.plasmasetup.po
+index b006483..9dc4652 100644
+--- a/po/nb/org.kde.plasmasetup.po
++++ b/po/nb/org.kde.plasmasetup.po
+@@ -663,3 +663,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/nl/org.kde.plasmasetup.po b/po/nl/org.kde.plasmasetup.po
+index 8b6097c..fb4ac97 100644
+--- a/po/nl/org.kde.plasmasetup.po
++++ b/po/nl/org.kde.plasmasetup.po
+@@ -818,3 +818,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/nn/org.kde.plasmasetup.po b/po/nn/org.kde.plasmasetup.po
+index 1ea2779..0a7783c 100644
+--- a/po/nn/org.kde.plasmasetup.po
++++ b/po/nn/org.kde.plasmasetup.po
+@@ -662,3 +662,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/pl/org.kde.plasmasetup.po b/po/pl/org.kde.plasmasetup.po
+index f97e526..1e7848d 100644
+--- a/po/pl/org.kde.plasmasetup.po
++++ b/po/pl/org.kde.plasmasetup.po
+@@ -797,3 +797,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/pt_BR/org.kde.plasmasetup.po b/po/pt_BR/org.kde.plasmasetup.po
+index 27a744b..fcd9333 100644
+--- a/po/pt_BR/org.kde.plasmasetup.po
++++ b/po/pt_BR/org.kde.plasmasetup.po
+@@ -742,3 +742,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ro/org.kde.plasmasetup.po b/po/ro/org.kde.plasmasetup.po
+index 003ab97..ff03544 100644
+--- a/po/ro/org.kde.plasmasetup.po
++++ b/po/ro/org.kde.plasmasetup.po
+@@ -668,3 +668,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/ru/org.kde.plasmasetup.po b/po/ru/org.kde.plasmasetup.po
+index e940571..37c30e8 100644
+--- a/po/ru/org.kde.plasmasetup.po
++++ b/po/ru/org.kde.plasmasetup.po
+@@ -723,3 +723,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/sk/org.kde.plasmasetup.po b/po/sk/org.kde.plasmasetup.po
+index c095cd1..b4cf672 100644
+--- a/po/sk/org.kde.plasmasetup.po
++++ b/po/sk/org.kde.plasmasetup.po
+@@ -680,3 +680,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/sl/org.kde.plasmasetup.po b/po/sl/org.kde.plasmasetup.po
+index c90e4ec..09e71d9 100644
+--- a/po/sl/org.kde.plasmasetup.po
++++ b/po/sl/org.kde.plasmasetup.po
+@@ -755,3 +755,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/sv/org.kde.plasmasetup.po b/po/sv/org.kde.plasmasetup.po
+index a5ad0a5..1b469fc 100644
+--- a/po/sv/org.kde.plasmasetup.po
++++ b/po/sv/org.kde.plasmasetup.po
+@@ -811,3 +811,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/tr/org.kde.plasmasetup.po b/po/tr/org.kde.plasmasetup.po
+index 0da900f..490164d 100644
+--- a/po/tr/org.kde.plasmasetup.po
++++ b/po/tr/org.kde.plasmasetup.po
+@@ -817,3 +817,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/uk/org.kde.plasmasetup.po b/po/uk/org.kde.plasmasetup.po
+index 47f9559..9ea4f66 100644
+--- a/po/uk/org.kde.plasmasetup.po
++++ b/po/uk/org.kde.plasmasetup.po
+@@ -823,3 +823,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/zh_CN/org.kde.plasmasetup.po b/po/zh_CN/org.kde.plasmasetup.po
+index bce83c8..f09da63 100644
+--- a/po/zh_CN/org.kde.plasmasetup.po
++++ b/po/zh_CN/org.kde.plasmasetup.po
+@@ -653,3 +653,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Use Photo"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/po/zh_TW/org.kde.plasmasetup.po b/po/zh_TW/org.kde.plasmasetup.po
+index 37d2a40..b6b168b 100644
+--- a/po/zh_TW/org.kde.plasmasetup.po
++++ b/po/zh_TW/org.kde.plasmasetup.po
+@@ -800,3 +800,35 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Choose Another Option"
+ msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgctxt "%1 is a link"
++msgid "You can get BlossomOS Switch for your Windows computer at %1."
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Copy the backup on this computer"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought it along during the installation"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "Your Backup Is Already Here"
++msgstr ""
++
++#: modules/switch/contents/ui/main.qml
++#, kde-format
++msgid "BlossomOS Switch brought your backup along during the installation. Enter the PIN you wrote down when you made it."
++msgstr ""
++
++#: modules/switchutil/switchutil.cpp
++#, kde-format
++msgctxt "@item where a backup is stored"
++msgid "This computer"
++msgstr ""
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index e44b024..ab89c1c 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -63,6 +63,8 @@ const QString PLASMA_SETUP_HOMEDIR = QStringLiteral("/run/plasma-setup");
+ 
+ const QString SWITCH_STAGING_DIR = QStringLiteral("/var/home/.blossomos-switch");
+ 
++const QString SWITCH_LOCAL_DIR = QStringLiteral("/var/lib/switch");
++
+ const QString SWITCH_PORT = QStringLiteral("47120/tcp");
+ 
+ const QString FLATPAK_EXPORTS = QStringLiteral("/var/lib/flatpak/exports/share/applications/");
+@@ -1037,7 +1039,6 @@ ActionReply PlasmaSetupAuthHelper::enrolltpmunlock(const QVariantMap &args)
+ 
+ ActionReply PlasmaSetupAuthHelper::prepareswitch(const QVariantMap &args)
+ {
+-    Q_UNUSED(args);
+ 
+     const QByteArray staging = QFile::encodeName(SWITCH_STAGING_DIR);
+     struct stat info;
+@@ -1057,6 +1058,14 @@ ActionReply PlasmaSetupAuthHelper::prepareswitch(const QVariantMap &args)
+         return makeErrorReply(QStringLiteral("Unable to hand ") + SWITCH_STAGING_DIR + QStringLiteral(" to the setup user"));
+     }
+ 
++    struct stat localInfo;
++    const QByteArray local = QFile::encodeName(SWITCH_LOCAL_DIR);
++    if (args.value(QStringLiteral("local")).toBool() && lstat(local.constData(), &localInfo) == 0 && S_ISDIR(localInfo.st_mode)) {
++        switchOwnerUid = setupUser->pw_uid;
++        switchOwnerGid = setupUser->pw_gid;
++        nftw(local.constData(), switchChownEntry, 64, FTW_PHYS);
++    }
++
+     ActionReply reply = ActionReply::SuccessReply();
+     reply.setData({{QStringLiteral("path"), SWITCH_STAGING_DIR}});
+     return reply;
+@@ -1207,11 +1216,18 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+         reportMove();
+     }
+ 
+-    const QJsonObject browser = manifest.value(QStringLiteral("browser")).toObject();
+-    const QString browserId = browser.value(QStringLiteral("flatpak")).toString();
+-    const QString browserData = browser.value(QStringLiteral("data")).toString();
+-    if (switchAppId(browserId) && browserData == QStringLiteral("browser/") + browserId) {
+-        switchMergeMove(staging + QLatin1Char('/') + browserData, homePath + QStringLiteral("/.var/app/") + browserId);
++    QStringList browserIds;
++    for (const QJsonValue &value : manifest.value(QStringLiteral("browsers")).toArray()) {
++        const QJsonObject browser = value.toObject();
++        const QString browserId = browser.value(QStringLiteral("flatpak")).toString();
++        if (!switchAppId(browserId) || browserIds.contains(browserId)) {
++            continue;
++        }
++        browserIds << browserId;
++        const QString browserData = browser.value(QStringLiteral("data")).toString();
++        if (browserData == QStringLiteral("browser/") + browserId) {
++            switchMergeMove(staging + QLatin1Char('/') + browserData, homePath + QStringLiteral("/.var/app/") + browserId);
++        }
+     }
+     reportMove();
+ 
+@@ -1278,9 +1294,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+     }
+ 
+     QStringList apps;
+-    if (switchAppId(browserId)) {
+-        apps << browserId;
+-    }
++    apps << browserIds;
+     for (const QJsonValue &value : manifest.value(QStringLiteral("apps")).toArray()) {
+         const QString id = value.toObject().value(QStringLiteral("flatpak")).toString();
+         if (switchAppId(id) && !apps.contains(id)) {
+@@ -1322,6 +1336,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+     switchOwnerUid = userInfo.uid;
+     switchOwnerGid = userInfo.gid;
+     nftw(QFile::encodeName(homePath).constData(), switchChownEntry, 64, FTW_PHYS);
++    ::rmdir(QFile::encodeName(SWITCH_LOCAL_DIR).constData());
+ 
+     const auto launchers = [&homePath, &knownPwa](const QJsonArray &ids) {
+         QStringList result;

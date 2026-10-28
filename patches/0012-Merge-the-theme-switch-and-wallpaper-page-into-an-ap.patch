@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 13:02:13 +0200
-Subject: [PATCH 12/17] Merge the theme switch and wallpaper page into an
+Subject: [PATCH 12/18] Merge the theme switch and wallpaper page into an
  appearance page
 
 The Dark Theme switch moves from the "Before we get started" page, which
