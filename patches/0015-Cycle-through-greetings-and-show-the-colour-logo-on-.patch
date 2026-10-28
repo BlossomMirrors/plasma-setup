@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Mon, 26 Oct 2026 16:30:01 +0100
-Subject: [PATCH 15/15] Cycle through greetings and show the colour logo on the
+Subject: [PATCH 15/17] Cycle through greetings and show the colour logo on the
  start page
 
 Instead of "Welcome to BlossomOS", the start page fades through

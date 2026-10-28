@@ -62,7 +62,7 @@ for line in lines:
         continue
     if re.match(r'^Requires:\s+plasma-lookandfeel-fedora', line):
         out += [f'Requires:       {p}\n' for p in
-                ('blossomui', 'bibata-cursor-themes', 'blossom-sound-theme', 'blossomos-skel')]
+                ('blossomui', 'bibata-cursor-themes', 'blossom-sound-theme', 'blossomos-skel', 'qt6-qtmultimedia')]
         continue
     if re.match(r'^(Build)?Requires:\s+system-backgrounds-kde', line):
         continue
@@ -80,6 +80,8 @@ for line in lines:
         out.append('Source100: wallpapers.json\n')
         # The browser page installs browsers with libflatpak
         out.append('BuildRequires:  pkgconfig(flatpak)\n')
+        out += [f'BuildRequires:  {dep}\n' for dep in
+                ('cmake(KF6DNSSD)', 'cmake(KF6Solid)', 'pkgconfig(libarchive)', 'pkgconfig(openssl)')]
     if line.startswith('%cmake_install'):
         out.append('install -Dpm644 %{SOURCE100} %{buildroot}%{_datadir}/%{name}/wallpapers.json\n')
 

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 04:55:31 +0200
-Subject: [PATCH 08/15] Add a wallpaper page
+Subject: [PATCH 08/17] Add a wallpaper page
 
 Lets the user pick the desktop wallpaper from the ones listed in
 plasma-setup/wallpapers.json, with its default preselected. Thumbnails

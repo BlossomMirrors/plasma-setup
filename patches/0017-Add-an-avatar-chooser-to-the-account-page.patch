@@ -1,0 +1,3018 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Tue, 27 Oct 2026 19:09:58 +0100
+Subject: [PATCH 17/17] Add an avatar chooser to the account page
+
+---
+ files/plasma-setup-polkit.rules              |   1 +
+ modules/account/contents/ui/AvatarDialog.qml | 261 +++++++++++++++++++
+ modules/account/contents/ui/main.qml         |  14 +-
+ po/ar/org.kde.plasmasetup.po                 |  56 ++++
+ po/az/org.kde.plasmasetup.po                 |  56 ++++
+ po/ca/org.kde.plasmasetup.po                 |  56 ++++
+ po/ca@valencia/org.kde.plasmasetup.po        |  56 ++++
+ po/cs/org.kde.plasmasetup.po                 |  56 ++++
+ po/de/org.kde.plasmasetup.po                 |  56 ++++
+ po/en_GB/org.kde.plasmasetup.po              |  56 ++++
+ po/es/org.kde.plasmasetup.po                 |  56 ++++
+ po/eu/org.kde.plasmasetup.po                 |  56 ++++
+ po/fi/org.kde.plasmasetup.po                 |  56 ++++
+ po/fr/org.kde.plasmasetup.po                 |  56 ++++
+ po/ga/org.kde.plasmasetup.po                 |  56 ++++
+ po/gl/org.kde.plasmasetup.po                 |  56 ++++
+ po/he/org.kde.plasmasetup.po                 |  56 ++++
+ po/hu/org.kde.plasmasetup.po                 |  56 ++++
+ po/ia/org.kde.plasmasetup.po                 |  56 ++++
+ po/it/org.kde.plasmasetup.po                 |  56 ++++
+ po/ja/org.kde.plasmasetup.po                 |  56 ++++
+ po/ka/org.kde.plasmasetup.po                 |  56 ++++
+ po/ko/org.kde.plasmasetup.po                 |  56 ++++
+ po/lt/org.kde.plasmasetup.po                 |  56 ++++
+ po/lv/org.kde.plasmasetup.po                 |  56 ++++
+ po/nb/org.kde.plasmasetup.po                 |  56 ++++
+ po/nl/org.kde.plasmasetup.po                 |  56 ++++
+ po/nn/org.kde.plasmasetup.po                 |  56 ++++
+ po/pl/org.kde.plasmasetup.po                 |  56 ++++
+ po/pt_BR/org.kde.plasmasetup.po              |  56 ++++
+ po/ro/org.kde.plasmasetup.po                 |  56 ++++
+ po/ru/org.kde.plasmasetup.po                 |  56 ++++
+ po/sk/org.kde.plasmasetup.po                 |  56 ++++
+ po/sl/org.kde.plasmasetup.po                 |  56 ++++
+ po/sv/org.kde.plasmasetup.po                 |  56 ++++
+ po/tr/org.kde.plasmasetup.po                 |  56 ++++
+ po/uk/org.kde.plasmasetup.po                 |  56 ++++
+ po/zh_CN/org.kde.plasmasetup.po              |  56 ++++
+ po/zh_TW/org.kde.plasmasetup.po              |  56 ++++
+ src/accountcontroller.cpp                    |  80 ++++++
+ src/accountcontroller.h                      |  17 ++
+ src/auth/authhelper.cpp                      |  64 ++++-
+ src/auth/authhelper.h                        |   2 +
+ src/auth/org.kde.plasmasetup.actions         |   7 +
+ src/initialstartutil.cpp                     |   2 +
+ 45 files changed, 2444 insertions(+), 20 deletions(-)
+ create mode 100644 modules/account/contents/ui/AvatarDialog.qml
+
+diff --git a/files/plasma-setup-polkit.rules b/files/plasma-setup-polkit.rules
+index b63a7ed..780851d 100644
+--- a/files/plasma-setup-polkit.rules
++++ b/files/plasma-setup-polkit.rules
+@@ -43,6 +43,7 @@ polkit.addRule(function (action, subject) {
+         "org.kde.plasmasetup.prepareswitch", // Create the folder a BlossomOS Switch backup is unpacked into
+         "org.kde.plasmasetup.switchfirewall", // Open the BlossomOS Switch port while waiting for a Windows computer
+         "org.kde.plasmasetup.restorebackup", // Move the unpacked backup into the new user's home
++        "org.kde.plasmasetup.setnewuseravatar", // Set the picture chosen on the account page
+         "org.freedesktop.udisks2.filesystem-mount", // Mount the external drive with the backup
+     ];
+ 
+diff --git a/modules/account/contents/ui/AvatarDialog.qml b/modules/account/contents/ui/AvatarDialog.qml
+new file mode 100644
+index 0000000..f82390f
+--- /dev/null
++++ b/modules/account/contents/ui/AvatarDialog.qml
+@@ -0,0 +1,261 @@
++// SPDX-FileCopyrightText: 2026 Leonie Ain <me@koyu.space>
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Layouts
++import QtMultimedia
++
++import org.kde.kirigami as Kirigami
++import org.kde.kirigamiaddons.components as KirigamiComponents
++
++import org.kde.plasmasetup
++import org.kde.plasmasetup.switchutil as Switch
++
++Kirigami.Dialog {
++    id: dialog
++
++    required property string name
++
++    readonly property url current: AccountController.avatarChosen ? AccountController.avatar : Switch.SwitchUtil.profilePicture
++    readonly property bool hasCamera: devices.videoInputs.length > 0
++    readonly property bool customPhoto: AccountController.avatarChosen && AccountController.avatar.toString() !== ""
++        && AccountController.avatar.toString() !== Switch.SwitchUtil.profilePicture.toString()
++        && !AccountController.avatarPictures.some(picture => picture.toString() === AccountController.avatar.toString())
++    property bool cameraOpen: false
++    property url photo: ""
++    property bool cameraFailed: false
++
++    parent: Overlay.overlay
++    title: cameraOpen ? i18nc("@title:window", "Take a Photo") : i18nc("@title:window", "Choose a Picture")
++    padding: Kirigami.Units.largeSpacing
++    standardButtons: Kirigami.Dialog.NoButton
++
++    onClosed: {
++        cameraOpen = false;
++        photo = "";
++        cameraFailed = false;
++    }
++
++    function choose(picture: url): void {
++        AccountController.chooseAvatar(picture);
++        close();
++    }
++
++    function same(a: url, b: url): bool {
++        return a.toString() === b.toString();
++    }
++
++    MediaDevices {
++        id: devices
++    }
++
++    CaptureSession {
++        camera: Camera {
++            active: dialog.opened && dialog.cameraOpen && dialog.photo.toString() === ""
++            onErrorOccurred: dialog.cameraFailed = true
++        }
++        imageCapture: ImageCapture {
++            id: capture
++
++            onImageSaved: (requestId, path) => {
++                dialog.photo = AccountController.squarePhoto(path);
++                dialog.cameraFailed = dialog.photo.toString() === "";
++            }
++            onErrorOccurred: dialog.cameraFailed = true
++        }
++        videoOutput: viewfinder
++    }
++
++    component Tile: AbstractButton {
++        id: tile
++
++        property bool selected: false
++
++        implicitWidth: Kirigami.Units.gridUnit * 4
++        implicitHeight: implicitWidth
++        hoverEnabled: true
++        focusPolicy: Qt.StrongFocus
++
++        Accessible.role: Accessible.RadioButton
++        Accessible.checked: selected
++
++        ToolTip.visible: hovered && text !== ""
++        ToolTip.text: text
++        ToolTip.delay: Kirigami.Units.toolTipDelay
++
++        background: Rectangle {
++            radius: width / 2
++            color: "transparent"
++            border.width: tile.selected ? 3 : (tile.hovered || tile.visualFocus ? 2 : 0)
++            border.color: tile.selected ? Kirigami.Theme.highlightColor : Qt.alpha(Kirigami.Theme.highlightColor, 0.6)
++        }
++    }
++
++    component PictureTile: Tile {
++        id: pictureTile
++
++        required property url picture
++        property string initials: ""
++
++        selected: dialog.same(dialog.current, picture)
++        onClicked: dialog.choose(picture)
++
++        contentItem: KirigamiComponents.Avatar {
++            anchors.fill: parent
++            anchors.margins: Kirigami.Units.smallSpacing
++            source: pictureTile.picture
++            name: pictureTile.initials
++        }
++    }
++
++    contentItem: StackLayout {
++        currentIndex: dialog.cameraOpen ? 1 : 0
++
++        Item {
++            implicitWidth: pictures.implicitWidth
++            implicitHeight: pictures.implicitHeight
++
++            GridLayout {
++                id: pictures
++
++                anchors.horizontalCenter: parent.horizontalCenter
++                columns: 5
++                rowSpacing: Kirigami.Units.largeSpacing
++                columnSpacing: Kirigami.Units.largeSpacing
++
++                PictureTile {
++                    visible: Switch.SwitchUtil.profilePicture.toString() !== ""
++                    picture: Switch.SwitchUtil.profilePicture
++                    text: i18n("From your old computer")
++                }
++
++                PictureTile {
++                    visible: dialog.customPhoto
++                    picture: dialog.customPhoto ? AccountController.avatar : ""
++                    text: i18n("Your photo")
++                }
++
++                Repeater {
++                    model: AccountController.avatarPictures
++
++                    delegate: PictureTile {
++                        required property url modelData
++
++                        picture: modelData
++                        text: modelData.toString().replace(/^.*\//, "").replace(/\.[^.]*$/, "")
++                    }
++                }
++
++                PictureTile {
++                    picture: ""
++                    initials: dialog.name
++                    text: i18n("Initials")
++                }
++
++                Tile {
++                    visible: dialog.hasCamera
++                    text: i18n("Webcam")
++                    onClicked: dialog.cameraOpen = true
++
++                    contentItem: Rectangle {
++                        anchors.fill: parent
++                        anchors.margins: Kirigami.Units.smallSpacing
++                        radius: width / 2
++                        color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
++
++                        Kirigami.Icon {
++                            anchors.centerIn: parent
++                            width: Kirigami.Units.iconSizes.medium
++                            height: width
++                            source: "camera-photo-symbolic"
++                        }
++                    }
++                }
++            }
++        }
++
++        ColumnLayout {
++            spacing: Kirigami.Units.largeSpacing
++
++            Item {
++                Layout.alignment: Qt.AlignHCenter
++                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
++                Layout.preferredHeight: Layout.preferredWidth
++
++                Rectangle {
++                    anchors.fill: parent
++                    radius: Kirigami.Units.cornerRadius
++                    color: "black"
++                }
++
++                VideoOutput {
++                    id: viewfinder
++
++                    anchors.fill: parent
++                    fillMode: VideoOutput.PreserveAspectCrop
++                    visible: dialog.photo.toString() === ""
++                }
++
++                Image {
++                    anchors.fill: parent
++                    visible: dialog.photo.toString() !== ""
++                    source: dialog.photo
++                    cache: false
++                    fillMode: Image.PreserveAspectCrop
++                }
++            }
++
++            Label {
++                Layout.fillWidth: true
++                horizontalAlignment: Text.AlignHCenter
++                wrapMode: Text.Wrap
++                visible: dialog.cameraFailed
++                color: Kirigami.Theme.negativeTextColor
++                text: i18n("The camera didn't work.")
++            }
++
++            RowLayout {
++                Layout.alignment: Qt.AlignHCenter
++                spacing: Kirigami.Units.smallSpacing
++
++                Button {
++                    icon.name: "go-previous-symbolic"
++                    text: i18nc("@action:button", "Back")
++                    onClicked: {
++                        dialog.cameraOpen = false;
++                        dialog.photo = "";
++                        dialog.cameraFailed = false;
++                    }
++                }
++
++                Button {
++                    visible: dialog.photo.toString() === ""
++                    enabled: capture.readyForCapture
++                    icon.name: "camera-photo-symbolic"
++                    text: i18nc("@action:button", "Take Photo")
++                    onClicked: {
++                        dialog.cameraFailed = false;
++                        capture.captureToFile(AccountController.photoPath());
++                    }
++                }
++
++                Button {
++                    visible: dialog.photo.toString() !== ""
++                    icon.name: "view-refresh"
++                    text: i18nc("@action:button", "Retake")
++                    onClicked: dialog.photo = ""
++                }
++
++                Button {
++                    visible: dialog.photo.toString() !== ""
++                    icon.name: "dialog-ok-apply"
++                    text: i18nc("@action:button", "Use Photo")
++                    onClicked: dialog.choose(dialog.photo)
++                }
++            }
++        }
++    }
++}
+diff --git a/modules/account/contents/ui/main.qml b/modules/account/contents/ui/main.qml
+index bb8bf1f..267975e 100644
+--- a/modules/account/contents/ui/main.qml
++++ b/modules/account/contents/ui/main.qml
+@@ -90,13 +90,15 @@ PlasmaSetupComponents.SetupModule {
+                     implicitHeight: implicitWidth
+ 
+                     name: fullNameField.text
+-                    source: Switch.SwitchUtil.profilePicture
++                    source: AccountController.avatarChosen ? AccountController.avatar : Switch.SwitchUtil.profilePicture
++                    text: i18nc("@action:button", "Choose a Picture")
+ 
+-                    // Disabled so it doesn't act like a button, instead we use it
+-                    // as a simple avatar with user initial for now.
+-                    //
+-                    // TODO: Implement avatar selection
+-                    enabled: false
++                    onClicked: avatarDialog.open()
++                }
++
++                AvatarDialog {
++                    id: avatarDialog
++                    name: fullNameField.text
+                 }
+ 
+                 // Padding around the text
+diff --git a/po/ar/org.kde.plasmasetup.po b/po/ar/org.kde.plasmasetup.po
+index a9f8ca7..63037b2 100644
+--- a/po/ar/org.kde.plasmasetup.po
++++ b/po/ar/org.kde.plasmasetup.po
+@@ -588,6 +588,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "اضبط حجم العناصر على الشاشة."
+ 
+diff --git a/po/az/org.kde.plasmasetup.po b/po/az/org.kde.plasmasetup.po
+index d3f01eb..dbfdd39 100644
+--- a/po/az/org.kde.plasmasetup.po
++++ b/po/az/org.kde.plasmasetup.po
+@@ -584,6 +584,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Ekrandakı elementlərin ölçüsünü tənzimləyin."
+ 
+diff --git a/po/ca/org.kde.plasmasetup.po b/po/ca/org.kde.plasmasetup.po
+index 7774c8a..8068a68 100644
+--- a/po/ca/org.kde.plasmasetup.po
++++ b/po/ca/org.kde.plasmasetup.po
+@@ -610,3 +610,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/ca@valencia/org.kde.plasmasetup.po b/po/ca@valencia/org.kde.plasmasetup.po
+index e111a0e..a10388e 100644
+--- a/po/ca@valencia/org.kde.plasmasetup.po
++++ b/po/ca@valencia/org.kde.plasmasetup.po
+@@ -613,3 +613,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/cs/org.kde.plasmasetup.po b/po/cs/org.kde.plasmasetup.po
+index 12fd48b..4af7cf5 100644
+--- a/po/cs/org.kde.plasmasetup.po
++++ b/po/cs/org.kde.plasmasetup.po
+@@ -610,3 +610,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index 3585b01..6564bbd 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -809,6 +809,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr "Abmelden"
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr "Bild auswählen"
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr "Bild auswählen"
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr "Foto aufnehmen"
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr "Dein Foto"
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr "Initialen"
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr "Webcam"
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr "Die Kamera hat nicht funktioniert."
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr "Foto aufnehmen"
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr "Neu aufnehmen"
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr "Foto verwenden"
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Passen Sie die Größe der Elemente auf dem Bildschirm an."
+ 
+diff --git a/po/en_GB/org.kde.plasmasetup.po b/po/en_GB/org.kde.plasmasetup.po
+index 31f3b7b..b910634 100644
+--- a/po/en_GB/org.kde.plasmasetup.po
++++ b/po/en_GB/org.kde.plasmasetup.po
+@@ -577,6 +577,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #, fuzzy
+ #~| msgid "Username:"
+ #~ msgctxt "@label:textfield"
+diff --git a/po/es/org.kde.plasmasetup.po b/po/es/org.kde.plasmasetup.po
+index b179958..d177184 100644
+--- a/po/es/org.kde.plasmasetup.po
++++ b/po/es/org.kde.plasmasetup.po
+@@ -613,3 +613,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/eu/org.kde.plasmasetup.po b/po/eu/org.kde.plasmasetup.po
+index 60f79e5..4ea78c4 100644
+--- a/po/eu/org.kde.plasmasetup.po
++++ b/po/eu/org.kde.plasmasetup.po
+@@ -583,6 +583,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Doitu pantailako elementuen neurria."
+ 
+diff --git a/po/fi/org.kde.plasmasetup.po b/po/fi/org.kde.plasmasetup.po
+index b01b3f0..759726a 100644
+--- a/po/fi/org.kde.plasmasetup.po
++++ b/po/fi/org.kde.plasmasetup.po
+@@ -580,6 +580,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Säädä näyttöalkioiden kokoa."
+ 
+diff --git a/po/fr/org.kde.plasmasetup.po b/po/fr/org.kde.plasmasetup.po
+index f5c4a7f..867ff9a 100644
+--- a/po/fr/org.kde.plasmasetup.po
++++ b/po/fr/org.kde.plasmasetup.po
+@@ -586,6 +586,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Ajustez la taille des éléments à l'écran."
+ 
+diff --git a/po/ga/org.kde.plasmasetup.po b/po/ga/org.kde.plasmasetup.po
+index 0c54071..a079225 100644
+--- a/po/ga/org.kde.plasmasetup.po
++++ b/po/ga/org.kde.plasmasetup.po
+@@ -602,3 +602,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/gl/org.kde.plasmasetup.po b/po/gl/org.kde.plasmasetup.po
+index 86a4004..9340c8e 100644
+--- a/po/gl/org.kde.plasmasetup.po
++++ b/po/gl/org.kde.plasmasetup.po
+@@ -585,6 +585,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Axuste o tamaño dos elementos na pantalla."
+ 
+diff --git a/po/he/org.kde.plasmasetup.po b/po/he/org.kde.plasmasetup.po
+index c3a8950..e965eb2 100644
+--- a/po/he/org.kde.plasmasetup.po
++++ b/po/he/org.kde.plasmasetup.po
+@@ -584,6 +584,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "אפשר לכוון את גודל הרכיבים שעל המסך."
+ 
+diff --git a/po/hu/org.kde.plasmasetup.po b/po/hu/org.kde.plasmasetup.po
+index 4291019..bde211c 100644
+--- a/po/hu/org.kde.plasmasetup.po
++++ b/po/hu/org.kde.plasmasetup.po
+@@ -608,3 +608,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/ia/org.kde.plasmasetup.po b/po/ia/org.kde.plasmasetup.po
+index f7841b3..141eeed 100644
+--- a/po/ia/org.kde.plasmasetup.po
++++ b/po/ia/org.kde.plasmasetup.po
+@@ -582,6 +582,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Adapta le grandor de elementos sur le schermo."
+ 
+diff --git a/po/it/org.kde.plasmasetup.po b/po/it/org.kde.plasmasetup.po
+index 9054a13..f949d68 100644
+--- a/po/it/org.kde.plasmasetup.po
++++ b/po/it/org.kde.plasmasetup.po
+@@ -582,6 +582,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Regola la dimensione degli elementi sullo schermo."
+ 
+diff --git a/po/ja/org.kde.plasmasetup.po b/po/ja/org.kde.plasmasetup.po
+index 54ba41f..58901c6 100644
+--- a/po/ja/org.kde.plasmasetup.po
++++ b/po/ja/org.kde.plasmasetup.po
+@@ -602,3 +602,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/ka/org.kde.plasmasetup.po b/po/ka/org.kde.plasmasetup.po
+index 1d84cfd..d11a458 100644
+--- a/po/ka/org.kde.plasmasetup.po
++++ b/po/ka/org.kde.plasmasetup.po
+@@ -582,6 +582,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "მოირგეთ ეკრანზე არსებული ელემენტების ზომები."
+ 
+diff --git a/po/ko/org.kde.plasmasetup.po b/po/ko/org.kde.plasmasetup.po
+index c81eb52..896796e 100644
+--- a/po/ko/org.kde.plasmasetup.po
++++ b/po/ko/org.kde.plasmasetup.po
+@@ -581,6 +581,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "화면 구성 요소의 크기를 조정하십시오."
+ 
+diff --git a/po/lt/org.kde.plasmasetup.po b/po/lt/org.kde.plasmasetup.po
+index 9081b99..ce00599 100644
+--- a/po/lt/org.kde.plasmasetup.po
++++ b/po/lt/org.kde.plasmasetup.po
+@@ -618,3 +618,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/lv/org.kde.plasmasetup.po b/po/lv/org.kde.plasmasetup.po
+index 94ca85f..8149c65 100644
+--- a/po/lv/org.kde.plasmasetup.po
++++ b/po/lv/org.kde.plasmasetup.po
+@@ -584,6 +584,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Pielāgojiet ekrāna elementu izmēru."
+ 
+diff --git a/po/nb/org.kde.plasmasetup.po b/po/nb/org.kde.plasmasetup.po
+index d46dce0..b006483 100644
+--- a/po/nb/org.kde.plasmasetup.po
++++ b/po/nb/org.kde.plasmasetup.po
+@@ -607,3 +607,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/nl/org.kde.plasmasetup.po b/po/nl/org.kde.plasmasetup.po
+index 3a06d34..8b6097c 100644
+--- a/po/nl/org.kde.plasmasetup.po
++++ b/po/nl/org.kde.plasmasetup.po
+@@ -583,6 +583,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Pas de grootte van de elementen op het scherm aan."
+ 
+diff --git a/po/nn/org.kde.plasmasetup.po b/po/nn/org.kde.plasmasetup.po
+index 7c7ca0c..1ea2779 100644
+--- a/po/nn/org.kde.plasmasetup.po
++++ b/po/nn/org.kde.plasmasetup.po
+@@ -606,3 +606,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/pl/org.kde.plasmasetup.po b/po/pl/org.kde.plasmasetup.po
+index ff0f5d9..f97e526 100644
+--- a/po/pl/org.kde.plasmasetup.po
++++ b/po/pl/org.kde.plasmasetup.po
+@@ -587,6 +587,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Dostosuj rozmiar rzeczy na ekranie."
+ 
+diff --git a/po/pt_BR/org.kde.plasmasetup.po b/po/pt_BR/org.kde.plasmasetup.po
+index 405f2c2..27a744b 100644
+--- a/po/pt_BR/org.kde.plasmasetup.po
++++ b/po/pt_BR/org.kde.plasmasetup.po
+@@ -582,6 +582,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Ajuste o tamanho dos elementos na tela."
+ 
+diff --git a/po/ro/org.kde.plasmasetup.po b/po/ro/org.kde.plasmasetup.po
+index 99997e5..003ab97 100644
+--- a/po/ro/org.kde.plasmasetup.po
++++ b/po/ro/org.kde.plasmasetup.po
+@@ -612,3 +612,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/ru/org.kde.plasmasetup.po b/po/ru/org.kde.plasmasetup.po
+index f07b23d..e940571 100644
+--- a/po/ru/org.kde.plasmasetup.po
++++ b/po/ru/org.kde.plasmasetup.po
+@@ -587,6 +587,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Настройте размер элементов на экране."
+ 
+diff --git a/po/sk/org.kde.plasmasetup.po b/po/sk/org.kde.plasmasetup.po
+index 206babb..c095cd1 100644
+--- a/po/sk/org.kde.plasmasetup.po
++++ b/po/sk/org.kde.plasmasetup.po
+@@ -580,6 +580,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #, fuzzy
+ #~ msgctxt "@label:textfield"
+ #~ msgid "Username"
+diff --git a/po/sl/org.kde.plasmasetup.po b/po/sl/org.kde.plasmasetup.po
+index 768968a..c90e4ec 100644
+--- a/po/sl/org.kde.plasmasetup.po
++++ b/po/sl/org.kde.plasmasetup.po
+@@ -583,6 +583,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Prilagodite velikost elementov na zaslonu."
+ 
+diff --git a/po/sv/org.kde.plasmasetup.po b/po/sv/org.kde.plasmasetup.po
+index 5f25a4b..a5ad0a5 100644
+--- a/po/sv/org.kde.plasmasetup.po
++++ b/po/sv/org.kde.plasmasetup.po
+@@ -580,6 +580,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Justera storleken på elementen på skärmen."
+ 
+diff --git a/po/tr/org.kde.plasmasetup.po b/po/tr/org.kde.plasmasetup.po
+index 258eea0..0da900f 100644
+--- a/po/tr/org.kde.plasmasetup.po
++++ b/po/tr/org.kde.plasmasetup.po
+@@ -585,6 +585,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Ekrandaki ögelerin büyüklüğünü ayarlayın."
+ 
+diff --git a/po/uk/org.kde.plasmasetup.po b/po/uk/org.kde.plasmasetup.po
+index 8c7438f..47f9559 100644
+--- a/po/uk/org.kde.plasmasetup.po
++++ b/po/uk/org.kde.plasmasetup.po
+@@ -586,6 +586,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Скоригуйте розмір елементів на екрані."
+ 
+diff --git a/po/zh_CN/org.kde.plasmasetup.po b/po/zh_CN/org.kde.plasmasetup.po
+index 83e959d..bce83c8 100644
+--- a/po/zh_CN/org.kde.plasmasetup.po
++++ b/po/zh_CN/org.kde.plasmasetup.po
+@@ -597,3 +597,59 @@ msgstr ""
+ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
++
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
+diff --git a/po/zh_TW/org.kde.plasmasetup.po b/po/zh_TW/org.kde.plasmasetup.po
+index 841a752..37d2a40 100644
+--- a/po/zh_TW/org.kde.plasmasetup.po
++++ b/po/zh_TW/org.kde.plasmasetup.po
+@@ -572,6 +572,62 @@ msgctxt "@action:button"
+ msgid "Log Out"
+ msgstr ""
+ 
++#: modules/account/contents/ui/main.qml:94
++#, kde-format
++msgctxt "@action:button"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Choose a Picture"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:32
++#, kde-format
++msgctxt "@title:window"
++msgid "Take a Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:138
++#, kde-format
++msgid "Your photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:155
++#, kde-format
++msgid "Initials"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:160
++#, kde-format
++msgid "Webcam"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:217
++#, kde-format
++msgid "The camera didn't work."
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:238
++#, kde-format
++msgctxt "@action:button"
++msgid "Take Photo"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:248
++#, kde-format
++msgctxt "@action:button"
++msgid "Retake"
++msgstr ""
++
++#: modules/account/contents/ui/AvatarDialog.qml:255
++#, kde-format
++msgctxt "@action:button"
++msgid "Use Photo"
++msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "請調整螢幕上元素的大小。"
+ 
+diff --git a/src/accountcontroller.cpp b/src/accountcontroller.cpp
+index f817ca0..1dabfd4 100644
+--- a/src/accountcontroller.cpp
++++ b/src/accountcontroller.cpp
+@@ -16,7 +16,10 @@
+ #include <KLocalizedString>
+ 
+ #include <QApplication>
++#include <QDir>
+ #include <QFile>
++#include <QImage>
++#include <QStandardPaths>
+ #include <QVariantMap>
+ 
+ #include <pwd.h>
+@@ -220,6 +223,83 @@ QStringList AccountController::userGroupsFromConfig() const
+     return parsedGroups;
+ }
+ 
++QUrl AccountController::avatar() const
++{
++    return m_avatar;
++}
++
++bool AccountController::avatarChosen() const
++{
++    return m_avatarChosen;
++}
++
++QList<QUrl> AccountController::avatarPictures() const
++{
++    QList<QUrl> pictures;
++    const QStringList directories =
++        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasma/avatars/photos"), QStandardPaths::LocateDirectory);
++    for (const QString &directory : directories) {
++        const QFileInfoList entries =
++            QDir(directory).entryInfoList({QStringLiteral("*.png"), QStringLiteral("*.jpg"), QStringLiteral("*.jpeg")}, QDir::Files, QDir::Name);
++        for (const QFileInfo &entry : entries) {
++            pictures << QUrl::fromLocalFile(entry.absoluteFilePath());
++        }
++    }
++    return pictures;
++}
++
++void AccountController::chooseAvatar(const QUrl &picture)
++{
++    m_avatar = picture.isLocalFile() ? picture : QUrl();
++    m_avatarChosen = true;
++    Q_EMIT avatarChanged();
++}
++
++QString AccountController::photoPath() const
++{
++    const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
++    QDir().mkpath(directory);
++    return directory + QStringLiteral("/camera-%1.jpg").arg(m_photoCount);
++}
++
++QUrl AccountController::squarePhoto(const QString &path)
++{
++    QImage image(path);
++    QFile::remove(path);
++    if (image.isNull()) {
++        return {};
++    }
++    const int side = std::min(image.width(), image.height());
++    image = image.copy((image.width() - side) / 2, (image.height() - side) / 2, side, side)
++                .scaled(512, 512, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
++    const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
++    QDir().mkpath(directory);
++    const QString target = directory + QStringLiteral("/avatar-%1.png").arg(++m_photoCount);
++    if (!image.save(target, "PNG")) {
++        return {};
++    }
++    return QUrl::fromLocalFile(target);
++}
++
++void AccountController::setNewUserAvatar()
++{
++    if (!m_avatarChosen || (!m_avatar.isEmpty() && !QFile::exists(m_avatar.toLocalFile()))) {
++        return;
++    }
++    if (qEnvironmentVariableIntValue("PLASMA_SETUP_PREVIEW") == 1) {
++        qCInfo(PlasmaSetup) << "Preview: not setting the avatar" << m_avatar;
++        return;
++    }
++
++    KAuth::Action action(QStringLiteral("org.kde.plasmasetup.setnewuseravatar"));
++    action.setHelperId(QStringLiteral("org.kde.plasmasetup"));
++    action.setArguments({{QStringLiteral("username"), m_username}, {QStringLiteral("picture"), m_avatar.toLocalFile()}});
++    KAuth::ExecuteJob *job = action.execute();
++    if (!job->exec()) {
++        qCWarning(PlasmaSetup) << "Failed to set the avatar of the new user:" << job->errorString();
++    }
++}
++
+ bool AccountController::hasExistingUsers() const
+ {
+     return m_hasExistingUsers;
+diff --git a/src/accountcontroller.h b/src/accountcontroller.h
+index 8cd8d43..e148b15 100644
+--- a/src/accountcontroller.h
++++ b/src/accountcontroller.h
+@@ -8,6 +8,7 @@
+ #include <QObject>
+ #include <QQmlEngine>
+ #include <QStringList>
++#include <QUrl>
+ #include <qqmlintegration.h>
+ 
+ #include <functional>
+@@ -27,6 +28,9 @@ class AccountController : public QObject
+      * Indicates whether at least one regular (non-system) user already exists on the system.
+      */
+     Q_PROPERTY(bool hasExistingUsers READ hasExistingUsers NOTIFY hasExistingUsersChanged)
++    Q_PROPERTY(QUrl avatar READ avatar NOTIFY avatarChanged)
++    Q_PROPERTY(bool avatarChosen READ avatarChosen NOTIFY avatarChanged)
++    Q_PROPERTY(QList<QUrl> avatarPictures READ avatarPictures CONSTANT)
+ 
+ public:
+     ~AccountController() override;
+@@ -84,11 +88,21 @@ public:
+      */
+     bool hasExistingUsers() const;
+ 
++    QUrl avatar() const;
++    bool avatarChosen() const;
++    QList<QUrl> avatarPictures() const;
++
++    Q_INVOKABLE void chooseAvatar(const QUrl &picture);
++    Q_INVOKABLE QString photoPath() const;
++    Q_INVOKABLE QUrl squarePhoto(const QString &path);
++    void setNewUserAvatar();
++
+ Q_SIGNALS:
+     void usernameChanged();
+     void fullNameChanged();
+     void passwordChanged();
+     void hasExistingUsersChanged();
++    void avatarChanged();
+ 
+ private:
+     /**
+@@ -111,6 +125,9 @@ private:
+      * Cached result of the existing-user detection. Defaults to false so the account page shows.
+      */
+     bool m_hasExistingUsers = false;
++    QUrl m_avatar;
++    bool m_avatarChosen = false;
++    int m_photoCount = 0;
+ 
+     /**
+      * Runs the detection routine once during construction to set the existing-user flag.
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index 0c58007..e44b024 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -252,6 +252,24 @@ static bool switchAppId(const QString &id)
+     return appId.match(id).hasMatch();
+ }
+ 
++static QString setAccountIcon(const QString &username, const QString &picture)
++{
++    QDBusInterface accounts(QStringLiteral("org.freedesktop.Accounts"),
++                            QStringLiteral("/org/freedesktop/Accounts"),
++                            QStringLiteral("org.freedesktop.Accounts"),
++                            QDBusConnection::systemBus());
++    const QDBusReply<QDBusObjectPath> userPath = accounts.call(QStringLiteral("FindUserByName"), username);
++    if (!userPath.isValid()) {
++        return userPath.error().message();
++    }
++    QDBusInterface user(QStringLiteral("org.freedesktop.Accounts"),
++                        userPath.value().path(),
++                        QStringLiteral("org.freedesktop.Accounts.User"),
++                        QDBusConnection::systemBus());
++    const QDBusMessage reply = user.call(QStringLiteral("SetIconFile"), picture);
++    return reply.type() == QDBusMessage::ErrorMessage ? reply.errorMessage() : QString();
++}
++
+ static bool switchDesktopId(const QString &id)
+ {
+     static const QRegularExpression desktopId(QStringLiteral("^[A-Za-z0-9_-][A-Za-z0-9_.-]*$"));
+@@ -1253,20 +1271,9 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+ 
+     const QString picture = stagedFile(manifest.value(QStringLiteral("profile")).toObject().value(QStringLiteral("picture")), QStringLiteral("profile"));
+     if (!picture.isEmpty()) {
+-        QDBusInterface accounts(QStringLiteral("org.freedesktop.Accounts"),
+-                                QStringLiteral("/org/freedesktop/Accounts"),
+-                                QStringLiteral("org.freedesktop.Accounts"),
+-                                QDBusConnection::systemBus());
+-        const QDBusReply<QDBusObjectPath> userPath = accounts.call(QStringLiteral("FindUserByName"), username);
+-        if (userPath.isValid()) {
+-            QDBusInterface user(QStringLiteral("org.freedesktop.Accounts"),
+-                                userPath.value().path(),
+-                                QStringLiteral("org.freedesktop.Accounts.User"),
+-                                QDBusConnection::systemBus());
+-            const QDBusMessage reply = user.call(QStringLiteral("SetIconFile"), picture);
+-            if (reply.type() == QDBusMessage::ErrorMessage) {
+-                qWarning() << "Unable to set the account picture:" << reply.errorMessage();
+-            }
++        const QString error = setAccountIcon(username, picture);
++        if (!error.isEmpty()) {
++            qWarning() << "Unable to set the account picture:" << error;
+         }
+     }
+ 
+@@ -1530,6 +1537,35 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+     return reply;
+ }
+ 
++ActionReply PlasmaSetupAuthHelper::setnewuseravatar(const QVariantMap &args)
++{
++    if (!args.value(QStringLiteral("username")).canConvert<QString>() || !args.value(QStringLiteral("picture")).canConvert<QString>()) {
++        return makeErrorReply(QStringLiteral("Username or picture argument is missing or invalid."));
++    }
++    const QString username = args.value(QStringLiteral("username")).toString();
++    try {
++        getUserInfo(username);
++    } catch (const std::runtime_error &e) {
++        return makeErrorReply(QStringLiteral("Failed to get user info: ") + QString::fromStdString(e.what()));
++    }
++
++    QString picture = args.value(QStringLiteral("picture")).toString();
++    if (!picture.isEmpty()) {
++        const QFileInfo info(picture);
++        picture = info.canonicalFilePath();
++        const bool allowed = picture.startsWith(QStringLiteral("/usr/share/plasma/avatars/")) || picture.startsWith(PLASMA_SETUP_HOMEDIR + QLatin1Char('/'));
++        if (!allowed || !info.isFile() || info.size() > 16 * 1024 * 1024) {
++            return makeErrorReply(QStringLiteral("Refusing to use this picture: ") + args.value(QStringLiteral("picture")).toString());
++        }
++    }
++
++    const QString error = setAccountIcon(username, picture);
++    if (!error.isEmpty()) {
++        return makeErrorReply(QStringLiteral("Unable to set the account picture: ") + error);
++    }
++    return ActionReply::SuccessReply();
++}
++
+ ActionReply PlasmaSetupAuthHelper::addUserToExtraGroups(const QString &username, const QVariant &extraGroupsVariant)
+ {
+     if (!extraGroupsVariant.canConvert<QStringList>()) {
+diff --git a/src/auth/authhelper.h b/src/auth/authhelper.h
+index 0c72eb2..b0457ff 100644
+--- a/src/auth/authhelper.h
++++ b/src/auth/authhelper.h
+@@ -137,6 +137,8 @@ public Q_SLOTS:
+ 
+     ActionReply restorebackup(const QVariantMap &args);
+ 
++    ActionReply setnewuseravatar(const QVariantMap &args);
++
+ private:
+     /**
+      * Adds a user to the provided supplementary groups using usermod.
+diff --git a/src/auth/org.kde.plasmasetup.actions b/src/auth/org.kde.plasmasetup.actions
+index 09b0247..ab89b07 100644
+--- a/src/auth/org.kde.plasmasetup.actions
++++ b/src/auth/org.kde.plasmasetup.actions
+@@ -607,3 +607,10 @@ Name[de]=Dateien zum neuen Benutzer kopieren
+ Description=Move the files and settings from another computer into the new user's home folder
+ Description[de]=Die Dateien und Einstellungen von einem anderen Computer in den Persönlichen Ordner des neuen Benutzers verschieben
+ Policy=no
++
++[org.kde.plasmasetup.setnewuseravatar]
++Name=Set the Account Picture
++Name[de]=Benutzerbild festlegen
++Description=Set the picture chosen during setup for the new user
++Description[de]=Das bei der Einrichtung gewählte Bild für den neuen Benutzer festlegen
++Policy=no
+diff --git a/src/initialstartutil.cpp b/src/initialstartutil.cpp
+index e8eb8be..ba62697 100644
+--- a/src/initialstartutil.cpp
++++ b/src/initialstartutil.cpp
+@@ -188,6 +188,8 @@ void InitialStartUtil::startRestore()
+ 
+ void InitialStartUtil::finishUserSteps()
+ {
++    m_accountController->setNewUserAvatar();
++
+     DisplayUtil displayUtil;
+     displayUtil.setGlobalThemeForNewUser(m_window, m_accountController->username());
+     displayUtil.setScalingForNewUser(m_window, m_accountController->username());

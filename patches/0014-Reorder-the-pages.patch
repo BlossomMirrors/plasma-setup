@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Mon, 26 Oct 2026 16:02:34 +0100
-Subject: [PATCH 14/15] Reorder the pages
+Subject: [PATCH 14/17] Reorder the pages
 
 ---
  docs/CUSTOM_MODULES.md           | 12 ++++++++----

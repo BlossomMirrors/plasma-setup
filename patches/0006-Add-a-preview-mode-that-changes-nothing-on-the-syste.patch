@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 01:18:33 +0200
-Subject: [PATCH 06/15] Add a preview mode that changes nothing on the system
+Subject: [PATCH 06/17] Add a preview mode that changes nothing on the system
 
 With PLASMA_SETUP_PREVIEW=1 (just preview) the wizard runs as usual but
 doesn't create the user, mark setup as done, log out, restart, shut down,
