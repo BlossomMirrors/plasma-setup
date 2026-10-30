@@ -1,0 +1,351 @@
+From 1de450bb81534d8abd6a3eda5e9bcb0d3aaf5e9d Mon Sep 17 00:00:00 2001
+From: Codex <codex@localhost>
+Date: Fri, 30 Oct 2026 14:52:40 +0100
+Subject: [PATCH] Restore device preferences and explicit folder links from
+ Switch backups
+
+---
+ modules/switchutil/switchutil.cpp |   8 ++
+ src/auth/CMakeLists.txt           |   2 +
+ src/auth/authhelper.cpp           |  38 +++++-
+ src/auth/switchpreferences.py     | 188 ++++++++++++++++++++++++++++++
+ tests/test_switchpreferences.py   |  56 +++++++++
+ 5 files changed, 291 insertions(+), 1 deletion(-)
+ create mode 100644 src/auth/switchpreferences.py
+ create mode 100644 tests/test_switchpreferences.py
+
+diff --git a/modules/switchutil/switchutil.cpp b/modules/switchutil/switchutil.cpp
+index d12caa5..32715c3 100644
+--- a/modules/switchutil/switchutil.cpp
++++ b/modules/switchutil/switchutil.cpp
+@@ -895,6 +895,14 @@ void SwitchUtil::receive(int descriptor)
+ void SwitchUtil::finishRestore(const QJsonObject &manifest)
+ {
+     m_manifest = manifest;
++    if (manifest.value("wallpaperTheme"_L1).toString() == "Blossom Rays"_L1) {
++        auto config = KSharedConfig::openConfig(u"plasma-setuprc"_s);
++        auto wallpaper = config->group(u"Wallpaper"_s);
++        if (!wallpaper.hasKey("Image") && QDir(u"/usr/share/wallpapers/Blossom Rays"_s).exists()) {
++            wallpaper.writeEntry("Image", u"/usr/share/wallpapers/Blossom Rays"_s);
++            config->sync();
++        }
++    }
+     m_source = manifest.value("computer"_L1).toString().left(64);
+     setPercent(1, 1);
+     setState(Done);
+diff --git a/src/auth/CMakeLists.txt b/src/auth/CMakeLists.txt
+index 4583dca..a74faac 100644
+--- a/src/auth/CMakeLists.txt
++++ b/src/auth/CMakeLists.txt
+@@ -26,3 +26,5 @@ kde_target_enable_exceptions(plasma-setup-auth-helper PRIVATE)
+ kauth_install_actions(org.kde.plasmasetup org.kde.plasmasetup.actions)
+ install(TARGETS plasma-setup-auth-helper DESTINATION ${KAUTH_HELPER_INSTALL_DIR})
+ kauth_install_helper_files(plasma-setup-auth-helper org.kde.plasmasetup root)
++
++install(FILES switchpreferences.py DESTINATION ${KDE_INSTALL_DATADIR}/plasma-setup)
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index ab89c1c..7fac293 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -1397,8 +1397,44 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+                 if (QFileInfo::exists(link) || QFileInfo(link).isSymLink()) {
+                     link = switchUniquePath(desktop, name);
+                 }
+-                QFile::link(resolved, link);
++                if (QFileInfo(resolved).isDir()) {
++                    if (QFileInfo::exists(link + QStringLiteral(".desktop"))) {
++                        link = switchUniquePath(desktop, name + QStringLiteral(".desktop"));
++                    } else {
++                        link += QStringLiteral(".desktop");
++                    }
++                    KConfig entry(link, KConfig::SimpleConfig);
++                    KConfigGroup group = entry.group(QStringLiteral("Desktop Entry"));
++                    group.writeEntry("Type", QStringLiteral("Link"));
++                    group.writeEntry("Name", name);
++                    group.writeEntry("Icon", QStringLiteral("folder"));
++                    group.writeEntry("URL", QUrl::fromLocalFile(resolved).toString());
++                    entry.sync();
++                } else if (QFileInfo(resolved).isFile()) {
++                    QFile::link(resolved, link);
++                }
++            }
++        }
++
++        const QJsonObject preferences = manifest.value(QStringLiteral("preferences")).toObject();
++        if (!preferences.isEmpty()) {
++            const QString configDir = homePath + QStringLiteral("/.config");
++            const QString autostartDir = configDir + QStringLiteral("/autostart");
++            QDir().mkpath(autostartDir);
++            QFile settings(configDir + QStringLiteral("/blossomos-switch-preferences.json"));
++            if (!settings.open(QIODevice::WriteOnly | QIODevice::Truncate)
++                || settings.write(QJsonDocument(preferences).toJson()) < 0) {
++                return makeErrorReply(QStringLiteral("Unable to save the device preferences"));
+             }
++            settings.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
++            KConfig entry(autostartDir + QStringLiteral("/blossomos-switch-preferences.desktop"), KConfig::SimpleConfig);
++            KConfigGroup group = entry.group(QStringLiteral("Desktop Entry"));
++            group.writeEntry("Type", QStringLiteral("Application"));
++            group.writeEntry("Name", QStringLiteral("BlossomOS Switch Preferences"));
++            group.writeEntry("Exec", QStringLiteral("python3 /usr/share/plasma-setup/switchpreferences.py"));
++            group.writeEntry("OnlyShowIn", QStringLiteral("KDE;"));
++            group.writeEntry("NoDisplay", true);
++            entry.sync();
+         }
+ 
+         if (!wallpaper.isEmpty() || !lockscreen.isEmpty() || !taskbar.isEmpty() || !start.isEmpty() || !pwas.isEmpty()) {
+diff --git a/src/auth/switchpreferences.py b/src/auth/switchpreferences.py
+new file mode 100644
+index 0000000..c291271
+--- /dev/null
++++ b/src/auth/switchpreferences.py
+@@ -0,0 +1,188 @@
++#!/usr/bin/python3
++# SPDX-License-Identifier: GPL-2.0-or-later
++"""Apply selected Switch preferences once, in the new user's Plasma session."""
++import json
++import logging
++import math
++import os
++from pathlib import Path
++import re
++import subprocess
++
++CONFIG = Path.home() / '.config'
++
++
++def run(*args):
++    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=20).stdout
++
++
++def write(file, groups, key, value):
++    args = ['kwriteconfig6', '--file', file]
++    for group in groups:
++        args += ['--group', group]
++    run(*args, '--key', key, str(value).lower() if isinstance(value, bool) else str(value))
++
++
++def number(data, key, low, high):
++    value = data.get(key)
++    return value if type(value) in (int, float) and math.isfinite(value) and low <= value <= high else None
++
++
++def display_commands(data, outputs):
++    screens = data.get('screens', [])
++    if not isinstance(screens, list):
++        return []
++    connected = [o for o in outputs if o.get('connected')]
++    commands, used = [], set()
++    dpi = number(data, 'dpi', 96, 384) or 96
++    scale = round(dpi / 96 * 4) / 4
++    for screen in screens:
++        if not isinstance(screen, dict):
++            continue
++        # Match Windows' EDID manufacturer/product code, never connector order.
++        match = re.search(r'MONITOR\\([A-Za-z0-9]+)\\', screen.get('device', ''))
++        model = match.group(1).lower() if match else ''
++        matches = [o for o in connected if model and model == str(o.get('windowsModel', '')).lower()]
++        if len(connected) == len(screens) == 1:
++            matches = connected
++        if len(matches) != 1 or matches[0]['id'] in used:
++            continue
++        output = matches[0]
++        width, height = number(screen, 'width', 320, 16384), number(screen, 'height', 200, 16384)
++        rotation = number(screen, 'rotation', 0, 3)
++        if rotation in (1, 3):
++            width, height = height, width
++        refresh = number(screen, 'refresh', 20, 1000) or 60
++        modes = [m for m in output.get('modes', []) if m.get('size') == {'width': width, 'height': height}]
++        if not modes:
++            continue
++        mode = min(modes, key=lambda m: abs(m.get('refreshRate', 0) - refresh))
++        x, y = number(screen, 'x', -65536, 65536), number(screen, 'y', -65536, 65536)
++        if x is None or y is None or rotation is None:
++            continue
++        prefix = f"output.{output['id']}"
++        commands += [f"{prefix}.mode.{mode['id']}", f'{prefix}.scale.{scale}',
++                     f'{prefix}.position.{round(x / scale)},{round(y / scale)}',
++                     f"{prefix}.rotation.{['none', 'left', 'inverted', 'right'][int(rotation)]}"]
++        used.add(output['id'])
++    # Do not apply half a multi-monitor layout when some devices cannot be matched.
++    return commands if len(used) == len(screens) else []
++
++
++def displays(data):
++    outputs = json.loads(run('kscreen-doctor', '-j')).get('outputs', [])
++    for output in outputs:
++        connector = output.get('name', '')
++        if not re.fullmatch(r'[A-Za-z0-9-]+', connector):
++            continue
++        for path in Path('/sys/class/drm').glob('card*-' + connector + '/edid'):
++            edid = path.read_bytes()
++            if len(edid) < 128 or edid[:8] != b'\x00\xff\xff\xff\xff\xff\xff\x00':
++                continue
++            vendor = int.from_bytes(edid[8:10], 'big')
++            manufacturer = ''.join(chr(64 + ((vendor >> shift) & 31)) for shift in (10, 5, 0))
++            output['windowsModel'] = manufacturer + f'{int.from_bytes(edid[10:12], "little"):04X}'
++    commands = display_commands(data, outputs)
++    if commands:
++        run('kscreen-doctor', *commands)
++
++
++def input_devices(data):
++    base = '/org/kde/KWin/InputDevice'
++    interface = 'org.kde.KWin.InputDevice'
++    def get(path, key):
++        return run('qdbus-qt6', 'org.kde.KWin', path, 'org.freedesktop.DBus.Properties.Get', interface, key).strip()
++    scroll = number(data, 'scrollLines', 1, 100)
++    if scroll is not None:
++        write('kdeglobals', ['KDE'], 'WheelScrollLines', int(scroll))
++    devices = run('qdbus-qt6', 'org.kde.KWin', base, 'org.kde.KWin.InputDeviceManager.devicesSysNames').splitlines()
++    for device in devices:
++        if not re.fullmatch(r'event\d+', device):
++            continue
++        path = f'{base}/{device}'
++        if get(path, 'pointer') != 'true':
++            continue
++        touchpad = get(path, 'touchpad') == 'true'
++        values = []
++        speed = number(data, 'touchpadSpeed' if touchpad else 'mouseSpeed', 1, 20)
++        if speed is not None:
++            values.append(('pointerAcceleration', 'supportsPointerAcceleration', 'double', max(-1, min(1, (speed - 10) / 10))))
++        handed = number(data, 'leftHanded', 0, 1)
++        if handed is not None:
++            values.append(('leftHanded', 'supportsLeftHanded', 'boolean', bool(handed)))
++        natural = number(data, 'naturalScroll', 0, 1)
++        if touchpad and natural is not None:
++            values.append(('naturalScroll', 'supportsNaturalScroll', 'boolean', bool(natural)))
++        for prop, support, kind, value in values:
++            if get(path, support) == 'true':
++                run('dbus-send', '--session', '--print-reply', '--dest=org.kde.KWin', path,
++                    'org.freedesktop.DBus.Properties.Set', f'string:{interface}', f'string:{prop}',
++                    f'variant:{kind}:{str(value).lower()}')
++
++
++def accessibility(data):
++    scale = number(data, 'textScale', 100, 225)
++    if scale is not None:
++        # Font DPI preserves the user's text enlargement independently of screen scaling.
++        write('kcmfonts', ['General'], 'forceFontDPI', round(96 * scale / 100))
++    animations = number(data, 'animations', 0, 1)
++    if animations is not None:
++        write('kdeglobals', ['KDE'], 'AnimationDurationFactor', 1 if animations else 0)
++        run('qdbus-qt6', 'org.kde.KWin', '/KWin', 'org.kde.KWin.reconfigure')
++
++
++def power(data):
++    for suffix, profile in [('Ac', 'AC'), ('Dc', 'Battery')]:
++        screen = number(data, 'screen' + suffix, 0, 86400)
++        sleep = number(data, 'sleep' + suffix, 0, 86400)
++        if screen is not None:
++            write('powerdevilrc', [profile, 'Display'], 'TurnOffDisplayWhenIdle', screen > 0)
++            write('powerdevilrc', [profile, 'Display'], 'TurnOffDisplayIdleTimeoutSec', int(screen))
++        if sleep is not None:
++            write('powerdevilrc', [profile, 'SuspendAndShutdown'], 'AutoSuspendAction', 1 if sleep else 0)
++            write('powerdevilrc', [profile, 'SuspendAndShutdown'], 'AutoSuspendIdleTimeoutSec', int(sleep))
++    run('qdbus-qt6', 'org.kde.Solid.PowerManagement', '/org/kde/Solid/PowerManagement', 'org.kde.Solid.PowerManagement.refreshStatus')
++
++
++def audio(data):
++    sinks = json.loads(run('pactl', '--format=json', 'list', 'sinks'))
++    name = data.get('output')
++    matches = [s for s in sinks if name and name.casefold() in {
++        str(s.get('description', '')).casefold(), str(s.get('properties', {}).get('device.description', '')).casefold()}]
++    if len(matches) == 1:
++        target = matches[0]['name']
++        run('pactl', 'set-default-sink', target)
++    elif len(sinks) == 1:
++        target = sinks[0]['name']
++    else:
++        return
++    volume = number(data, 'volume', 0, 100)
++    if volume is not None:
++        run('pactl', 'set-sink-volume', target, f'{int(volume)}%')
++
++
++def main():
++    source = CONFIG / 'blossomos-switch-preferences.json'
++    log = CONFIG / 'blossomos-switch-preferences.log'
++    logging.basicConfig(filename=log, level=logging.INFO)
++    preferences = json.loads(source.read_text())
++    failed = {}
++    for name, apply in [('display', displays), ('input', input_devices), ('accessibility', accessibility), ('power', power), ('audio', audio)]:
++        data = preferences.get(name)
++        if not isinstance(data, dict):
++            continue
++        try:
++            apply(data)
++        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
++            logging.exception('Could not apply %s preferences', name)
++            failed[name] = data
++    if failed:
++        # Retry only failed groups at the next login; leave successful groups alone.
++        source.write_text(json.dumps(failed))
++    else:
++        source.unlink(missing_ok=True)
++        (CONFIG / 'autostart/blossomos-switch-preferences.desktop').unlink(missing_ok=True)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_switchpreferences.py b/tests/test_switchpreferences.py
+new file mode 100644
+index 0000000..c88d752
+--- /dev/null
++++ b/tests/test_switchpreferences.py
+@@ -0,0 +1,56 @@
++# SPDX-License-Identifier: GPL-2.0-or-later
++import importlib.util
++from pathlib import Path
++import subprocess
++import tempfile
++import unittest
++from unittest.mock import patch
++
++spec = importlib.util.spec_from_file_location('preferences', Path(__file__).resolve().parents[1] / 'src/auth/switchpreferences.py')
++prefs = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(prefs)
++
++
++class PreferenceTests(unittest.TestCase):
++    def test_display_units_and_rotation(self):
++        screen = {'width': 1920, 'height': 1080, 'x': -1920, 'y': 0, 'rotation': 0, 'refresh': 60}
++        output = {'id': 7, 'connected': True, 'modes': [
++            {'id': 'a', 'size': {'width': 1920, 'height': 1080}, 'refreshRate': 60},
++            {'id': 'b', 'size': {'width': 1920, 'height': 1080}, 'refreshRate': 120}]}
++        commands = prefs.display_commands({'dpi': 144, 'screens': [screen]}, [output])
++        self.assertIn('output.7.mode.a', commands)
++        self.assertIn('output.7.scale.1.5', commands)
++        self.assertIn('output.7.position.-1280,0', commands)
++
++    def test_ambiguous_monitors_are_skipped(self):
++        screen = {'device': 'MONITOR\\DEL1234\\1', 'width': 1920, 'height': 1080, 'x': 0, 'y': 0, 'rotation': 0}
++        outputs = [{'id': i, 'connected': True, 'windowsModel': 'DEL1234'} for i in (1, 2)]
++        self.assertEqual([], prefs.display_commands({'screens': [screen, screen]}, outputs))
++
++    def test_unsupported_resolution_is_skipped(self):
++        self.assertEqual([], prefs.display_commands({'screens': [{'width': 9999, 'height': 9999}]}, [{'id': 1, 'connected': True, 'modes': []}]))
++
++    def test_power_never_means_disabled(self):
++        with patch.object(prefs, 'write') as write, patch.object(prefs, 'run'):
++            prefs.power({'screenAc': 0, 'sleepAc': 1200})
++            write.assert_any_call('powerdevilrc', ['AC', 'Display'], 'TurnOffDisplayWhenIdle', False)
++            write.assert_any_call('powerdevilrc', ['AC', 'SuspendAndShutdown'], 'AutoSuspendIdleTimeoutSec', 1200)
++
++    def test_audio_never_changes_an_ambiguous_device(self):
++        with patch.object(prefs, 'run', return_value='[{"name":"a"},{"name":"b"}]') as run:
++            prefs.audio({'output': 'Missing', 'volume': 90})
++            self.assertEqual(1, run.call_count)
++
++    def test_retry_only_failed_group(self):
++        with tempfile.TemporaryDirectory() as temporary:
++            config = Path(temporary)
++            source = config / 'blossomos-switch-preferences.json'
++            source.write_text('{"audio":{"volume":30},"display":{"screens":[]}}')
++            with patch.object(prefs, 'CONFIG', config), patch.object(prefs, 'audio'), patch.object(prefs, 'displays', side_effect=subprocess.TimeoutExpired('kscreen-doctor', 20)):
++                prefs.main()
++            self.assertNotIn('audio', source.read_text())
++            self.assertIn('display', source.read_text())
++
++
++if __name__ == '__main__':
++    unittest.main()

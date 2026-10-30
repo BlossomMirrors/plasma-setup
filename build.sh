@@ -62,7 +62,7 @@ for line in lines:
         continue
     if re.match(r'^Requires:\s+plasma-lookandfeel-fedora', line):
         out += [f'Requires:       {p}\n' for p in
-                ('blossomui', 'bibata-cursor-themes', 'blossom-sound-theme', 'blossomos-skel', 'qt6-qtmultimedia')]
+                ('blossomui', 'bibata-cursor-themes', 'blossom-sound-theme', 'blossomos-skel', 'qt6-qtmultimedia', 'python3', 'kscreen', 'kf6-kconfig', 'qt6-qttools', 'dbus-tools', 'pulseaudio-utils')]
         continue
     if re.match(r'^(Build)?Requires:\s+system-backgrounds-kde', line):
         continue

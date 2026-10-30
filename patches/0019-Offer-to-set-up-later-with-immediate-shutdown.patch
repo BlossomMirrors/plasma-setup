@@ -1,0 +1,161 @@
+From 0e37fe64f3682e5b26b4d2f7d3ae746b980adc13 Mon Sep 17 00:00:00 2001
+From: Codex <codex@localhost>
+Date: Fri, 30 Oct 2026 14:41:57 +0100
+Subject: [PATCH] Offer to set up later with immediate shutdown
+
+---
+ po/de/org.kde.plasmasetup.po |  3 ++
+ src/initialstartutil.cpp     |  9 ++++
+ src/initialstartutil.h       |  2 +
+ src/qml/SessionMenu.qml      | 92 +++++-------------------------------
+ 4 files changed, 26 insertions(+), 80 deletions(-)
+
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index 6a16ce2..e40c028 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -1033,3 +1033,6 @@ msgstr "BlossomOS Switch hat dein Backup bei der Installation mitgebracht. Gib d
+ msgctxt "@item where a backup is stored"
+ msgid "This computer"
+ msgstr "Dieser Computer"
++
++msgid "Set up later"
++msgstr "Später einrichten"
+diff --git a/src/initialstartutil.cpp b/src/initialstartutil.cpp
+index ba62697..51e66f9 100644
+--- a/src/initialstartutil.cpp
++++ b/src/initialstartutil.cpp
+@@ -95,6 +95,15 @@ void InitialStartUtil::setStep(const QString &id, const QString &state, int perc
+     Q_EMIT finishChanged();
+ }
+ 
++void InitialStartUtil::setUpLater()
++{
++    if (preview()) {
++        qCInfo(PlasmaSetup) << "Preview: not shutting down";
++        return;
++    }
++    m_session.requestShutdown(SessionManagement::ConfirmationMode::Skip);
++}
++
+ void InitialStartUtil::finish()
+ {
+     if (m_finishing) {
+diff --git a/src/initialstartutil.h b/src/initialstartutil.h
+index 5c541bb..c03474f 100644
+--- a/src/initialstartutil.h
++++ b/src/initialstartutil.h
+@@ -54,6 +54,8 @@ public:
+      */
+     Q_INVOKABLE void finish();
+ 
++    Q_INVOKABLE void setUpLater();
++
+     Q_INVOKABLE void logOutAfterError();
+ 
+     bool finishing() const;
+diff --git a/src/qml/SessionMenu.qml b/src/qml/SessionMenu.qml
+index 6a200c5..aa7d88e 100644
+--- a/src/qml/SessionMenu.qml
++++ b/src/qml/SessionMenu.qml
+@@ -1,88 +1,20 @@
+-/*
+-    SPDX-FileCopyrightText: 2026 Kristen McWilliam <kristen@kde.org>
+-
+-    SPDX-License-Identifier: LGPL-2.1-or-later
+-*/
+-
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
+ pragma ComponentBehavior: Bound
+ 
+ import QtQuick
+ import QtQuick.Controls
+-import org.kde.plasma.private.kicker as Kicker
+ import org.kde.kirigami as Kirigami
+-import org.kde.kitemmodels as KItemModels
+ import org.kde.plasmasetup
+ 
+-/*!
+-    Provides system session actions such as restart and shutdown.
+-
+-    A widget that displays buttons for system session actions like restart and shutdown. Intended to
+-    be placed in the landing page / outside of the wizard steps to allow users to easily manage the session.
+-*/
+-Flow {
+-    id: root
+-
+-    spacing: Kirigami.Units.gridUnit
+-    flow: Flow.LeftToRight
+-
+-    Kicker.SystemModel {
+-        id: systemModel
+-    }
+-
+-    KItemModels.KSortFilterProxyModel {
+-        id: filteredModel
+-        sourceModel: systemModel
+-
+-        // Whitelist only restart + shutdown actions.
+-        // Note: Some setups use "reboot" instead of "restart", so accept both.
+-        readonly property var allowedActionIds: ({
+-            "restart": true,
+-            "reboot": true,
+-            "shutdown": true
+-        })
+-
+-        filterRowCallback: (sourceRow, sourceParent) => {
+-            const FavoriteIdRole = sourceModel.KItemModels.KRoleNames.role("favoriteId");
+-            const favoriteId = String(sourceModel.data(sourceModel.index(sourceRow, 0, sourceParent), FavoriteIdRole));
+-            return allowedActionIds[favoriteId] === true;
+-        }
+-
+-        /*!
+-            Triggers the action associated with the given proxy row.
+-
+-            @param proxyRow The row index in the proxy model to trigger, e.g. reboot or shutdown.
+-        */
+-        function trigger(proxyRow: int): void {
+-            if (InitialStartUtil.preview) {
+-                console.info("Preview: not restarting or shutting down");
+-                return;
+-            }
+-            const sourceIndex = mapToSource(index(proxyRow, 0));
+-            systemModel.trigger(sourceIndex.row, "", null);
+-        }
+-    }
+-
+-    Repeater {
+-        model: filteredModel
+-
+-        delegate: ToolButton {
+-            required property int index
+-            required property var model
+-
+-            text: model.display
+-            icon.name: model.decoration
+-
+-            display: AbstractButton.TextBesideIcon
+-            flat: false
+-
+-            ToolTip.text: text
+-            ToolTip.visible: hovered || activeFocus
+-            ToolTip.delay: Kirigami.Units.toolTipDelay
+-
+-            onClicked: filteredModel.trigger(index)
+-
+-            Keys.onEnterPressed: clicked()
+-            Keys.onReturnPressed: clicked()
+-        }
+-    }
++ToolButton {
++    text: i18n("Set up later")
++    icon.name: "clock-symbolic"
++    display: AbstractButton.TextBesideIcon
++    flat: false
++    ToolTip.text: text
++    ToolTip.visible: hovered || activeFocus
++    ToolTip.delay: Kirigami.Units.toolTipDelay
++    onClicked: InitialStartUtil.setUpLater()
++    Keys.onEnterPressed: clicked()
++    Keys.onReturnPressed: clicked()
+ }
