@@ -14,14 +14,14 @@ the name beside it, in a light and a dark variant.
  src/assets/blossomos-logo-side-text-dark.svg | 35 ++++++++++
  src/assets/blossomos-logo-side-text.svg      | 35 ++++++++++
  src/assets/blossomos-symbolic.svg            |  8 ---
- src/qml/LandingComponent.qml                 | 71 ++++++++++++++------
- 6 files changed, 123 insertions(+), 34 deletions(-)
+ src/qml/LandingComponent.qml                 | 72 +++++++++++++-------
+ 6 files changed, 123 insertions(+), 35 deletions(-)
  create mode 100644 src/assets/blossomos-logo-side-text-dark.svg
  create mode 100644 src/assets/blossomos-logo-side-text.svg
  delete mode 100644 src/assets/blossomos-symbolic.svg
 
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index f1f07ae..481605e 100644
+index 1ec3b53..c910620 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -358,9 +358,8 @@ msgstr "Willkommen bei<br/><b>Plasma Desktop</b>"
@@ -147,10 +147,10 @@ index 6dd40bc..0000000
 -<path fill-rule="evenodd" clip-rule="evenodd" d="M204.629 83.4915C197.666 71.6836 177.033 71.2774 158.544 82.5843C141.064 93.274 131.139 114.21 136.013 126.317C136.229 126.853 136.961 126.802 137.175 126.261C141.06 116.447 149.448 108.106 160.832 104.117C175.247 99.0647 190.545 102.362 200.539 111.41C200.846 111.687 201.329 111.624 201.542 111.265C206.675 102.618 208.537 90.1188 204.629 83.4915Z" fill="white"/>
 -</svg>
 diff --git a/src/qml/LandingComponent.qml b/src/qml/LandingComponent.qml
-index 908233e..4999590 100644
+index fdcbbee..7ed80a3 100644
 --- a/src/qml/LandingComponent.qml
 +++ b/src/qml/LandingComponent.qml
-@@ -79,15 +79,42 @@ Item {
+@@ -89,15 +89,42 @@ Item {
              Layout.alignment: Qt.AlignHCenter
              spacing: Kirigami.Units.largeSpacing
  
@@ -196,7 +196,7 @@ index 908233e..4999590 100644
              }
  
              Button {
-@@ -113,28 +140,28 @@ Item {
+@@ -126,30 +153,29 @@ Item {
              Layout.fillWidth: true
              Layout.alignment: Qt.AlignBottom
              Layout.preferredHeight: root.isNarrow
@@ -209,6 +209,8 @@ index 908233e..4999590 100644
 +            // The logo with the name beside it, in light text on dark colours
 +            Image {
                  id: poweredBy
+-
+                 opacity: root.contentOpacity
 -                x: root.isNarrow ? (parent.width - width) / 2 : 0
 -                y: root.isNarrow ? 0 : (parent.height - height) / 2
 -                spacing: Kirigami.Units.largeSpacing

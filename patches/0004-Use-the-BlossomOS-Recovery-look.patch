@@ -11,7 +11,7 @@ BlossomUI Qt Quick style.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- po/de/org.kde.plasmasetup.po      |   6 +++
+ po/de/org.kde.plasmasetup.po      |   8 ++-
  src/CMakeLists.txt                |   7 +++
  src/assets/blossomos-symbolic.svg |   8 +++
  src/assets/bluenoise.png          | Bin 0 -> 4228 bytes
@@ -22,7 +22,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  src/qml/BlossomWindow.qml         |  54 +++++++++++++++++++
  src/qml/LandingComponent.qml      |  83 ++++++++----------------------
  src/qml/Wizard.qml                |  21 +++-----
- 11 files changed, 284 insertions(+), 76 deletions(-)
+ 11 files changed, 285 insertions(+), 77 deletions(-)
  create mode 100644 src/assets/blossomos-symbolic.svg
  create mode 100644 src/assets/bluenoise.png
  create mode 100644 src/glowprovider.cpp
@@ -31,22 +31,24 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 src/qml/BlossomWindow.qml
 
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index a5f7ef7..47c864b 100644
+index ab69daf..ff3bf8b 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
-@@ -356,6 +356,12 @@ msgstr "Willkommen bei<br/><b>Plasma Mobile</b>"
+@@ -356,7 +356,13 @@ msgstr "Willkommen bei<br/><b>Plasma Mobile</b>"
  msgid "Welcome to<br/><b>Plasma Desktop</b>"
  msgstr "Willkommen bei<br/><b>Plasma Desktop</b>"
  
+-#: src/qml/LandingComponent.qml:150
 +#: src/qml/LandingComponent.qml
 +#, kde-format
 +msgctxt "%1 is the distro name"
 +msgid "Welcome to<br/><b>%1</b>"
 +msgstr "Willkommen bei<br/><b>%1</b>"
 +
- #: src/qml/LandingComponent.qml:140
++#: src/qml/LandingComponent.qml:140
  #, kde-format
  msgid "Begin Setup"
+ msgstr "Einrichtung beginnen"
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
 index 4635d1c..6246f8f 100644
 --- a/src/CMakeLists.txt
@@ -462,10 +464,10 @@ index 0000000..6fe9662
 +    }
 +}
 diff --git a/src/qml/LandingComponent.qml b/src/qml/LandingComponent.qml
-index fec30ab..5422212 100644
+index 24d8c89..3ee0ed2 100644
 --- a/src/qml/LandingComponent.qml
 +++ b/src/qml/LandingComponent.qml
-@@ -13,14 +13,9 @@ import org.kde.plasmasetup
+@@ -16,16 +16,11 @@ import org.kde.plasmasetup
  Item {
      id: root
  
@@ -473,14 +475,16 @@ index fec30ab..5422212 100644
 -    readonly property real scaleLanding: 1.2
 -    readonly property real scaleSteps: 1
 -
+     property bool landingActive: true
+ 
      signal requestNextPage()
  
-     function returnToLanding() {
+     function activateLanding(): void {
 -        backgroundImage.scale = scaleLanding;
          contentOpacityAnim.to = 1;
          contentOpacityAnim.restart();
-     }
-@@ -36,57 +31,16 @@ Item {
+ 
+@@ -43,57 +38,16 @@ Item {
          onFinished: duration = 200
      }
  
@@ -539,7 +543,7 @@ index fec30ab..5422212 100644
      }
  
      // split layout decisions into narrow vs short:
-@@ -121,15 +75,13 @@ Item {
+@@ -131,15 +85,13 @@ Item {
  
              Label {
                  Layout.fillWidth: true
@@ -558,7 +562,7 @@ index fec30ab..5422212 100644
              }
  
              Button {
-@@ -138,10 +90,9 @@ Item {
+@@ -148,10 +100,9 @@ Item {
  
                  opacity: root.contentOpacity
                  text: i18n("Begin Setup")
@@ -570,13 +574,15 @@ index fec30ab..5422212 100644
                      contentOpacityAnim.to = 0;
                      contentOpacityAnim.restart();
                      root.requestNextPage()
-@@ -163,17 +114,25 @@ Item {
+@@ -176,19 +127,27 @@ Item {
                  ? poweredBy.implicitHeight + Kirigami.Units.smallSpacing + sessionMenu.implicitHeight
                  : Math.max(poweredBy.implicitHeight, sessionMenu.implicitHeight)
  
 -            Kirigami.Heading {
 +            RowLayout {
                  id: poweredBy
+ 
+                 opacity: root.contentOpacity
 -                width: parent.width
 +                x: root.isNarrow ? (parent.width - width) / 2 : 0
                  y: root.isNarrow ? 0 : (parent.height - height) / 2
@@ -605,10 +611,10 @@ index fec30ab..5422212 100644
  
              SessionMenu {
 diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
-index 79fb025..b1a9032 100644
+index fa3b5ac..b740c57 100644
 --- a/src/qml/Wizard.qml
 +++ b/src/qml/Wizard.qml
-@@ -196,16 +196,10 @@ Kirigami.Page {
+@@ -217,16 +217,10 @@ Kirigami.Page {
              y: stepsComponent.translateY
          }
  
@@ -627,7 +633,7 @@ index 79fb025..b1a9032 100644
  
              anchors {
                  // On mobile, behave like a full-height page (no floating card)
-@@ -217,8 +211,8 @@ Kirigami.Page {
+@@ -238,8 +232,8 @@ Kirigami.Page {
                  centerIn: Kirigami.Settings.isMobile ? undefined : parent
              }
  
@@ -638,7 +644,7 @@ index 79fb025..b1a9032 100644
  
              Behavior on height {
                  NumberAnimation {
-@@ -238,7 +232,8 @@ Kirigami.Page {
+@@ -259,7 +253,8 @@ Kirigami.Page {
                      id: stepHeading
                      opacity: 0
                      horizontalAlignment: Text.AlignHCenter
@@ -648,7 +654,7 @@ index 79fb025..b1a9032 100644
  
                      Layout.fillWidth: true
                      Layout.alignment: Qt.AlignHCenter
-@@ -293,7 +288,7 @@ Kirigami.Page {
+@@ -314,7 +309,7 @@ Kirigami.Page {
                          Layout.alignment: Qt.AlignLeft
  
                          text: i18nc("@action:button", "Back")
@@ -656,8 +662,8 @@ index 79fb025..b1a9032 100644
 +                        icon.name: "go-previous-symbolic"
  
                          onClicked: root.requestPreviousPage()
-                     }
-@@ -309,7 +304,7 @@ Kirigami.Page {
+ 
+@@ -333,7 +328,7 @@ Kirigami.Page {
  
                          visible: !root.onFinalPage
                          text: i18nc("@action:button", "Next")

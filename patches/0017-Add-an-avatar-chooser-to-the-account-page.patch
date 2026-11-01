@@ -332,10 +332,10 @@ index 0000000..f82390f
 +    }
 +}
 diff --git a/modules/account/contents/ui/main.qml b/modules/account/contents/ui/main.qml
-index bb8bf1f..267975e 100644
+index c29e849..18da080 100644
 --- a/modules/account/contents/ui/main.qml
 +++ b/modules/account/contents/ui/main.qml
-@@ -90,13 +90,15 @@ PlasmaSetupComponents.SetupModule {
+@@ -92,13 +92,15 @@ PlasmaSetupComponents.SetupModule {
                      implicitHeight: implicitWidth
  
                      name: fullNameField.text
@@ -358,7 +358,7 @@ index bb8bf1f..267975e 100644
  
                  // Padding around the text
 diff --git a/po/ar/org.kde.plasmasetup.po b/po/ar/org.kde.plasmasetup.po
-index a9f8ca7..63037b2 100644
+index 6118212..aecf2e4 100644
 --- a/po/ar/org.kde.plasmasetup.po
 +++ b/po/ar/org.kde.plasmasetup.po
 @@ -588,6 +588,62 @@ msgctxt "@action:button"
@@ -425,7 +425,7 @@ index a9f8ca7..63037b2 100644
  #~ msgstr "اضبط حجم العناصر على الشاشة."
  
 diff --git a/po/az/org.kde.plasmasetup.po b/po/az/org.kde.plasmasetup.po
-index d3f01eb..dbfdd39 100644
+index 2ed84c6..36efdc0 100644
 --- a/po/az/org.kde.plasmasetup.po
 +++ b/po/az/org.kde.plasmasetup.po
 @@ -584,6 +584,62 @@ msgctxt "@action:button"
@@ -492,14 +492,13 @@ index d3f01eb..dbfdd39 100644
  #~ msgstr "Ekrandakı elementlərin ölçüsünü tənzimləyin."
  
 diff --git a/po/ca/org.kde.plasmasetup.po b/po/ca/org.kde.plasmasetup.po
-index 7774c8a..8068a68 100644
+index eaef257..3fb5581 100644
 --- a/po/ca/org.kde.plasmasetup.po
 +++ b/po/ca/org.kde.plasmasetup.po
-@@ -610,3 +610,59 @@ msgstr ""
- msgctxt "@action:button"
+@@ -611,6 +611,62 @@ msgctxt "@action:button"
  msgid "Log Out"
  msgstr ""
-+
+ 
 +#: modules/account/contents/ui/main.qml:94
 +#, kde-format
 +msgctxt "@action:button"
@@ -555,8 +554,12 @@ index 7774c8a..8068a68 100644
 +msgctxt "@action:button"
 +msgid "Use Photo"
 +msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Ajusteu la mida dels elements a la pantalla."
+ 
 diff --git a/po/ca@valencia/org.kde.plasmasetup.po b/po/ca@valencia/org.kde.plasmasetup.po
-index e111a0e..a10388e 100644
+index 612fe33..82bb165 100644
 --- a/po/ca@valencia/org.kde.plasmasetup.po
 +++ b/po/ca@valencia/org.kde.plasmasetup.po
 @@ -613,3 +613,59 @@ msgstr ""
@@ -620,10 +623,10 @@ index e111a0e..a10388e 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/cs/org.kde.plasmasetup.po b/po/cs/org.kde.plasmasetup.po
-index 12fd48b..4af7cf5 100644
+index 1b79736..b234214 100644
 --- a/po/cs/org.kde.plasmasetup.po
 +++ b/po/cs/org.kde.plasmasetup.po
-@@ -610,3 +610,59 @@ msgstr ""
+@@ -611,3 +611,59 @@ msgstr ""
  msgctxt "@action:button"
  msgid "Log Out"
  msgstr ""
@@ -684,7 +687,7 @@ index 12fd48b..4af7cf5 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 3585b01..6564bbd 100644
+index 9c6938d..5e2cd04 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -809,6 +809,62 @@ msgctxt "@action:button"
@@ -751,7 +754,7 @@ index 3585b01..6564bbd 100644
  #~ msgstr "Passen Sie die Größe der Elemente auf dem Bildschirm an."
  
 diff --git a/po/en_GB/org.kde.plasmasetup.po b/po/en_GB/org.kde.plasmasetup.po
-index 31f3b7b..b910634 100644
+index 32226da..b03b51f 100644
 --- a/po/en_GB/org.kde.plasmasetup.po
 +++ b/po/en_GB/org.kde.plasmasetup.po
 @@ -577,6 +577,62 @@ msgctxt "@action:button"
@@ -818,7 +821,7 @@ index 31f3b7b..b910634 100644
  #~| msgid "Username:"
  #~ msgctxt "@label:textfield"
 diff --git a/po/es/org.kde.plasmasetup.po b/po/es/org.kde.plasmasetup.po
-index b179958..d177184 100644
+index 3a79a77..46b0853 100644
 --- a/po/es/org.kde.plasmasetup.po
 +++ b/po/es/org.kde.plasmasetup.po
 @@ -613,3 +613,59 @@ msgstr ""
@@ -882,7 +885,7 @@ index b179958..d177184 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/eu/org.kde.plasmasetup.po b/po/eu/org.kde.plasmasetup.po
-index 60f79e5..4ea78c4 100644
+index 1e1a524..3bf4278 100644
 --- a/po/eu/org.kde.plasmasetup.po
 +++ b/po/eu/org.kde.plasmasetup.po
 @@ -583,6 +583,62 @@ msgctxt "@action:button"
@@ -949,7 +952,7 @@ index 60f79e5..4ea78c4 100644
  #~ msgstr "Doitu pantailako elementuen neurria."
  
 diff --git a/po/fi/org.kde.plasmasetup.po b/po/fi/org.kde.plasmasetup.po
-index b01b3f0..759726a 100644
+index a419c85..9c4d5b4 100644
 --- a/po/fi/org.kde.plasmasetup.po
 +++ b/po/fi/org.kde.plasmasetup.po
 @@ -580,6 +580,62 @@ msgctxt "@action:button"
@@ -1016,7 +1019,7 @@ index b01b3f0..759726a 100644
  #~ msgstr "Säädä näyttöalkioiden kokoa."
  
 diff --git a/po/fr/org.kde.plasmasetup.po b/po/fr/org.kde.plasmasetup.po
-index f5c4a7f..867ff9a 100644
+index adb98ff..0ad193a 100644
 --- a/po/fr/org.kde.plasmasetup.po
 +++ b/po/fr/org.kde.plasmasetup.po
 @@ -586,6 +586,62 @@ msgctxt "@action:button"
@@ -1083,7 +1086,7 @@ index f5c4a7f..867ff9a 100644
  #~ msgstr "Ajustez la taille des éléments à l'écran."
  
 diff --git a/po/ga/org.kde.plasmasetup.po b/po/ga/org.kde.plasmasetup.po
-index 0c54071..a079225 100644
+index f76fe27..5b4cacf 100644
 --- a/po/ga/org.kde.plasmasetup.po
 +++ b/po/ga/org.kde.plasmasetup.po
 @@ -602,3 +602,59 @@ msgstr ""
@@ -1147,7 +1150,7 @@ index 0c54071..a079225 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/gl/org.kde.plasmasetup.po b/po/gl/org.kde.plasmasetup.po
-index 86a4004..9340c8e 100644
+index 07a2b6f..c8efdad 100644
 --- a/po/gl/org.kde.plasmasetup.po
 +++ b/po/gl/org.kde.plasmasetup.po
 @@ -585,6 +585,62 @@ msgctxt "@action:button"
@@ -1214,7 +1217,7 @@ index 86a4004..9340c8e 100644
  #~ msgstr "Axuste o tamaño dos elementos na pantalla."
  
 diff --git a/po/he/org.kde.plasmasetup.po b/po/he/org.kde.plasmasetup.po
-index c3a8950..e965eb2 100644
+index d1d0ea8..075c866 100644
 --- a/po/he/org.kde.plasmasetup.po
 +++ b/po/he/org.kde.plasmasetup.po
 @@ -584,6 +584,62 @@ msgctxt "@action:button"
@@ -1281,7 +1284,7 @@ index c3a8950..e965eb2 100644
  #~ msgstr "אפשר לכוון את גודל הרכיבים שעל המסך."
  
 diff --git a/po/hu/org.kde.plasmasetup.po b/po/hu/org.kde.plasmasetup.po
-index 4291019..bde211c 100644
+index 2c6d511..3a041ea 100644
 --- a/po/hu/org.kde.plasmasetup.po
 +++ b/po/hu/org.kde.plasmasetup.po
 @@ -608,3 +608,59 @@ msgstr ""
@@ -1345,7 +1348,7 @@ index 4291019..bde211c 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/ia/org.kde.plasmasetup.po b/po/ia/org.kde.plasmasetup.po
-index f7841b3..141eeed 100644
+index 0c44a92..4fd6d0b 100644
 --- a/po/ia/org.kde.plasmasetup.po
 +++ b/po/ia/org.kde.plasmasetup.po
 @@ -582,6 +582,62 @@ msgctxt "@action:button"
@@ -1412,7 +1415,7 @@ index f7841b3..141eeed 100644
  #~ msgstr "Adapta le grandor de elementos sur le schermo."
  
 diff --git a/po/it/org.kde.plasmasetup.po b/po/it/org.kde.plasmasetup.po
-index 9054a13..f949d68 100644
+index b7bf72c..ddf4543 100644
 --- a/po/it/org.kde.plasmasetup.po
 +++ b/po/it/org.kde.plasmasetup.po
 @@ -582,6 +582,62 @@ msgctxt "@action:button"
@@ -1479,7 +1482,7 @@ index 9054a13..f949d68 100644
  #~ msgstr "Regola la dimensione degli elementi sullo schermo."
  
 diff --git a/po/ja/org.kde.plasmasetup.po b/po/ja/org.kde.plasmasetup.po
-index 54ba41f..58901c6 100644
+index 4dadd8e..0c0f721 100644
 --- a/po/ja/org.kde.plasmasetup.po
 +++ b/po/ja/org.kde.plasmasetup.po
 @@ -602,3 +602,59 @@ msgstr ""
@@ -1543,7 +1546,7 @@ index 54ba41f..58901c6 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/ka/org.kde.plasmasetup.po b/po/ka/org.kde.plasmasetup.po
-index 1d84cfd..d11a458 100644
+index 56158ff..43bcb58 100644
 --- a/po/ka/org.kde.plasmasetup.po
 +++ b/po/ka/org.kde.plasmasetup.po
 @@ -582,6 +582,62 @@ msgctxt "@action:button"
@@ -1610,7 +1613,7 @@ index 1d84cfd..d11a458 100644
  #~ msgstr "მოირგეთ ეკრანზე არსებული ელემენტების ზომები."
  
 diff --git a/po/ko/org.kde.plasmasetup.po b/po/ko/org.kde.plasmasetup.po
-index c81eb52..896796e 100644
+index 4ce4430..4a32741 100644
 --- a/po/ko/org.kde.plasmasetup.po
 +++ b/po/ko/org.kde.plasmasetup.po
 @@ -581,6 +581,62 @@ msgctxt "@action:button"
@@ -1677,7 +1680,7 @@ index c81eb52..896796e 100644
  #~ msgstr "화면 구성 요소의 크기를 조정하십시오."
  
 diff --git a/po/lt/org.kde.plasmasetup.po b/po/lt/org.kde.plasmasetup.po
-index 9081b99..ce00599 100644
+index 0a2d3db..ce743ce 100644
 --- a/po/lt/org.kde.plasmasetup.po
 +++ b/po/lt/org.kde.plasmasetup.po
 @@ -618,3 +618,59 @@ msgstr ""
@@ -1741,7 +1744,7 @@ index 9081b99..ce00599 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/lv/org.kde.plasmasetup.po b/po/lv/org.kde.plasmasetup.po
-index 94ca85f..8149c65 100644
+index 56ba54a..81d312b 100644
 --- a/po/lv/org.kde.plasmasetup.po
 +++ b/po/lv/org.kde.plasmasetup.po
 @@ -584,6 +584,62 @@ msgctxt "@action:button"
@@ -1808,7 +1811,7 @@ index 94ca85f..8149c65 100644
  #~ msgstr "Pielāgojiet ekrāna elementu izmēru."
  
 diff --git a/po/nb/org.kde.plasmasetup.po b/po/nb/org.kde.plasmasetup.po
-index d46dce0..b006483 100644
+index 38eb2b1..b8fd72f 100644
 --- a/po/nb/org.kde.plasmasetup.po
 +++ b/po/nb/org.kde.plasmasetup.po
 @@ -607,3 +607,59 @@ msgstr ""
@@ -1872,7 +1875,7 @@ index d46dce0..b006483 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/nl/org.kde.plasmasetup.po b/po/nl/org.kde.plasmasetup.po
-index 3a06d34..8b6097c 100644
+index a679cc5..29b376f 100644
 --- a/po/nl/org.kde.plasmasetup.po
 +++ b/po/nl/org.kde.plasmasetup.po
 @@ -583,6 +583,62 @@ msgctxt "@action:button"
@@ -1939,7 +1942,7 @@ index 3a06d34..8b6097c 100644
  #~ msgstr "Pas de grootte van de elementen op het scherm aan."
  
 diff --git a/po/nn/org.kde.plasmasetup.po b/po/nn/org.kde.plasmasetup.po
-index 7c7ca0c..1ea2779 100644
+index d3a4721..82c7325 100644
 --- a/po/nn/org.kde.plasmasetup.po
 +++ b/po/nn/org.kde.plasmasetup.po
 @@ -606,3 +606,59 @@ msgstr ""
@@ -2003,7 +2006,7 @@ index 7c7ca0c..1ea2779 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/pl/org.kde.plasmasetup.po b/po/pl/org.kde.plasmasetup.po
-index ff0f5d9..f97e526 100644
+index ac58f9d..f4bbb6d 100644
 --- a/po/pl/org.kde.plasmasetup.po
 +++ b/po/pl/org.kde.plasmasetup.po
 @@ -587,6 +587,62 @@ msgctxt "@action:button"
@@ -2070,7 +2073,7 @@ index ff0f5d9..f97e526 100644
  #~ msgstr "Dostosuj rozmiar rzeczy na ekranie."
  
 diff --git a/po/pt_BR/org.kde.plasmasetup.po b/po/pt_BR/org.kde.plasmasetup.po
-index 405f2c2..27a744b 100644
+index 4bad29b..2e77c9a 100644
 --- a/po/pt_BR/org.kde.plasmasetup.po
 +++ b/po/pt_BR/org.kde.plasmasetup.po
 @@ -582,6 +582,62 @@ msgctxt "@action:button"
@@ -2137,7 +2140,7 @@ index 405f2c2..27a744b 100644
  #~ msgstr "Ajuste o tamanho dos elementos na tela."
  
 diff --git a/po/ro/org.kde.plasmasetup.po b/po/ro/org.kde.plasmasetup.po
-index 99997e5..003ab97 100644
+index a34b3f7..334ac40 100644
 --- a/po/ro/org.kde.plasmasetup.po
 +++ b/po/ro/org.kde.plasmasetup.po
 @@ -612,3 +612,59 @@ msgstr ""
@@ -2201,10 +2204,10 @@ index 99997e5..003ab97 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/ru/org.kde.plasmasetup.po b/po/ru/org.kde.plasmasetup.po
-index f07b23d..e940571 100644
+index 06df9ab..917cd2b 100644
 --- a/po/ru/org.kde.plasmasetup.po
 +++ b/po/ru/org.kde.plasmasetup.po
-@@ -587,6 +587,62 @@ msgctxt "@action:button"
+@@ -588,6 +588,62 @@ msgctxt "@action:button"
  msgid "Log Out"
  msgstr ""
  
@@ -2268,7 +2271,7 @@ index f07b23d..e940571 100644
  #~ msgstr "Настройте размер элементов на экране."
  
 diff --git a/po/sk/org.kde.plasmasetup.po b/po/sk/org.kde.plasmasetup.po
-index 206babb..c095cd1 100644
+index 41a2a2e..f621fd5 100644
 --- a/po/sk/org.kde.plasmasetup.po
 +++ b/po/sk/org.kde.plasmasetup.po
 @@ -580,6 +580,62 @@ msgctxt "@action:button"
@@ -2335,7 +2338,7 @@ index 206babb..c095cd1 100644
  #~ msgctxt "@label:textfield"
  #~ msgid "Username"
 diff --git a/po/sl/org.kde.plasmasetup.po b/po/sl/org.kde.plasmasetup.po
-index 768968a..c90e4ec 100644
+index 6779dbc..3a24bdc 100644
 --- a/po/sl/org.kde.plasmasetup.po
 +++ b/po/sl/org.kde.plasmasetup.po
 @@ -583,6 +583,62 @@ msgctxt "@action:button"
@@ -2402,7 +2405,7 @@ index 768968a..c90e4ec 100644
  #~ msgstr "Prilagodite velikost elementov na zaslonu."
  
 diff --git a/po/sv/org.kde.plasmasetup.po b/po/sv/org.kde.plasmasetup.po
-index 5f25a4b..a5ad0a5 100644
+index d274f04..224cbb0 100644
 --- a/po/sv/org.kde.plasmasetup.po
 +++ b/po/sv/org.kde.plasmasetup.po
 @@ -580,6 +580,62 @@ msgctxt "@action:button"
@@ -2469,7 +2472,7 @@ index 5f25a4b..a5ad0a5 100644
  #~ msgstr "Justera storleken på elementen på skärmen."
  
 diff --git a/po/tr/org.kde.plasmasetup.po b/po/tr/org.kde.plasmasetup.po
-index 258eea0..0da900f 100644
+index 0cbd35f..53be99a 100644
 --- a/po/tr/org.kde.plasmasetup.po
 +++ b/po/tr/org.kde.plasmasetup.po
 @@ -585,6 +585,62 @@ msgctxt "@action:button"
@@ -2536,7 +2539,7 @@ index 258eea0..0da900f 100644
  #~ msgstr "Ekrandaki ögelerin büyüklüğünü ayarlayın."
  
 diff --git a/po/uk/org.kde.plasmasetup.po b/po/uk/org.kde.plasmasetup.po
-index 8c7438f..47f9559 100644
+index 05b59e4..6ad6a4a 100644
 --- a/po/uk/org.kde.plasmasetup.po
 +++ b/po/uk/org.kde.plasmasetup.po
 @@ -586,6 +586,62 @@ msgctxt "@action:button"
@@ -2603,7 +2606,7 @@ index 8c7438f..47f9559 100644
  #~ msgstr "Скоригуйте розмір елементів на екрані."
  
 diff --git a/po/zh_CN/org.kde.plasmasetup.po b/po/zh_CN/org.kde.plasmasetup.po
-index 83e959d..bce83c8 100644
+index 439812c..ad5baca 100644
 --- a/po/zh_CN/org.kde.plasmasetup.po
 +++ b/po/zh_CN/org.kde.plasmasetup.po
 @@ -597,3 +597,59 @@ msgstr ""
@@ -2667,7 +2670,7 @@ index 83e959d..bce83c8 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/zh_TW/org.kde.plasmasetup.po b/po/zh_TW/org.kde.plasmasetup.po
-index 841a752..37d2a40 100644
+index e02ccfe..017a9a5 100644
 --- a/po/zh_TW/org.kde.plasmasetup.po
 +++ b/po/zh_TW/org.kde.plasmasetup.po
 @@ -572,6 +572,62 @@ msgctxt "@action:button"
@@ -2734,10 +2737,10 @@ index 841a752..37d2a40 100644
  #~ msgstr "請調整螢幕上元素的大小。"
  
 diff --git a/src/accountcontroller.cpp b/src/accountcontroller.cpp
-index f817ca0..1dabfd4 100644
+index 4634b41..2fea5ae 100644
 --- a/src/accountcontroller.cpp
 +++ b/src/accountcontroller.cpp
-@@ -16,7 +16,10 @@
+@@ -17,7 +17,10 @@
  #include <KLocalizedString>
  
  #include <QApplication>
@@ -2748,7 +2751,7 @@ index f817ca0..1dabfd4 100644
  #include <QVariantMap>
  
  #include <pwd.h>
-@@ -220,6 +223,83 @@ QStringList AccountController::userGroupsFromConfig() const
+@@ -238,6 +241,83 @@ QStringList AccountController::userGroupsFromConfig() const
      return parsedGroups;
  }
  
@@ -2833,10 +2836,10 @@ index f817ca0..1dabfd4 100644
  {
      return m_hasExistingUsers;
 diff --git a/src/accountcontroller.h b/src/accountcontroller.h
-index 8cd8d43..e148b15 100644
+index 5c93171..dac2da2 100644
 --- a/src/accountcontroller.h
 +++ b/src/accountcontroller.h
-@@ -8,6 +8,7 @@
+@@ -9,6 +9,7 @@
  #include <QObject>
  #include <QQmlEngine>
  #include <QStringList>
@@ -2844,7 +2847,7 @@ index 8cd8d43..e148b15 100644
  #include <qqmlintegration.h>
  
  #include <functional>
-@@ -27,6 +28,9 @@ class AccountController : public QObject
+@@ -28,6 +29,9 @@ class AccountController : public QObject
       * Indicates whether at least one regular (non-system) user already exists on the system.
       */
      Q_PROPERTY(bool hasExistingUsers READ hasExistingUsers NOTIFY hasExistingUsersChanged)
@@ -2854,7 +2857,7 @@ index 8cd8d43..e148b15 100644
  
  public:
      ~AccountController() override;
-@@ -84,11 +88,21 @@ public:
+@@ -93,11 +97,21 @@ public:
       */
      bool hasExistingUsers() const;
  
@@ -2876,7 +2879,7 @@ index 8cd8d43..e148b15 100644
  
  private:
      /**
-@@ -111,6 +125,9 @@ private:
+@@ -120,6 +134,9 @@ private:
       * Cached result of the existing-user detection. Defaults to false so the account page shows.
       */
      bool m_hasExistingUsers = false;
@@ -2989,10 +2992,10 @@ index 0c72eb2..b0457ff 100644
      /**
       * Adds a user to the provided supplementary groups using usermod.
 diff --git a/src/auth/org.kde.plasmasetup.actions b/src/auth/org.kde.plasmasetup.actions
-index 09b0247..ab89b07 100644
+index 0858056..5ac337d 100644
 --- a/src/auth/org.kde.plasmasetup.actions
 +++ b/src/auth/org.kde.plasmasetup.actions
-@@ -607,3 +607,10 @@ Name[de]=Dateien zum neuen Benutzer kopieren
+@@ -716,3 +716,10 @@ Name[de]=Dateien zum neuen Benutzer kopieren
  Description=Move the files and settings from another computer into the new user's home folder
  Description[de]=Die Dateien und Einstellungen von einem anderen Computer in den Persönlichen Ordner des neuen Benutzers verschieben
  Policy=no

@@ -892,7 +892,7 @@ index 0000000..0935615
 +    QString m_connectionName;
 +};
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 4a75f63..efd9e4d 100644
+index e83a337..e9319bb 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -400,6 +400,64 @@ msgstr ""
@@ -986,10 +986,10 @@ index a84ccb3..079770b 100644
  {
      return m_available;
 diff --git a/src/components/setupmodule.h b/src/components/setupmodule.h
-index 95adf9e..d18ad3d 100644
+index 6ec21c6..5f500dd 100644
 --- a/src/components/setupmodule.h
 +++ b/src/components/setupmodule.h
-@@ -17,6 +17,7 @@ class SetupModule : public QObject
+@@ -18,6 +18,7 @@ class SetupModule : public QObject
      Q_PROPERTY(bool available READ available WRITE setAvailable NOTIFY availableChanged)
      Q_PROPERTY(qreal cardWidth READ cardWidth WRITE setCardWidth NOTIFY cardWidthChanged)
      Q_PROPERTY(bool nextEnabled READ nextEnabled WRITE setNextEnabled NOTIFY nextEnabledChanged)
@@ -997,7 +997,7 @@ index 95adf9e..d18ad3d 100644
      Q_PROPERTY(QQuickItem *contentItem READ contentItem WRITE setContentItem REQUIRED NOTIFY contentItemChanged)
      Q_PROPERTY(QQmlListProperty<QObject> children READ children CONSTANT)
      Q_CLASSINFO("DefaultProperty", "children")
-@@ -36,17 +37,22 @@ public:
+@@ -37,12 +38,16 @@ public:
      [[nodiscard]] bool nextEnabled() const;
      void setNextEnabled(bool nextEnabled);
  
@@ -1012,7 +1012,9 @@ index 95adf9e..d18ad3d 100644
      void nextEnabledChanged();
 +    void backEnabledChanged();
      void cardWidthChanged();
- 
+     /*!
+      * Emitted when the module requests the same action as clicking the Next button.
+@@ -52,6 +57,7 @@ Q_SIGNALS:
  private:
      bool m_available{true};
      bool m_nextEnabled = true;
@@ -1102,10 +1104,10 @@ index fcda49b..e024298 100644
      void loaded();
  
 diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
-index f639eae..6a9f11b 100644
+index e0828ef..0dcf69c 100644
 --- a/src/qml/Wizard.qml
 +++ b/src/qml/Wizard.qml
-@@ -82,6 +82,14 @@ Kirigami.Page {
+@@ -93,6 +93,14 @@ Kirigami.Page {
              return;
          }
  
@@ -1120,12 +1122,12 @@ index f639eae..6a9f11b 100644
          previousStepItemX = 0;
  
          // Notify the next page/module it is being activated.
-@@ -307,6 +315,8 @@ Kirigami.Page {
+@@ -328,6 +336,8 @@ Kirigami.Page {
                          text: i18nc("@action:button", "Back")
                          icon.name: "go-previous-symbolic"
  
 +                        enabled: root.currentModule.backEnabled
 +
                          onClicked: root.requestPreviousPage()
-                     }
  
+                         Keys.onEnterPressed: clicked()

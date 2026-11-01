@@ -1,4 +1,4 @@
-From 0e37fe64f3682e5b26b4d2f7d3ae746b980adc13 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Codex <codex@localhost>
 Date: Fri, 30 Oct 2026 14:41:57 +0100
 Subject: [PATCH] Offer to set up later with immediate shutdown
@@ -7,11 +7,11 @@ Subject: [PATCH] Offer to set up later with immediate shutdown
  po/de/org.kde.plasmasetup.po |  3 ++
  src/initialstartutil.cpp     |  9 ++++
  src/initialstartutil.h       |  2 +
- src/qml/SessionMenu.qml      | 92 +++++-------------------------------
- 4 files changed, 26 insertions(+), 80 deletions(-)
+ src/qml/SessionMenu.qml      | 88 +++++-------------------------------
+ 4 files changed, 26 insertions(+), 76 deletions(-)
 
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 6a16ce2..e40c028 100644
+index 264fceb..8e063fd 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -1033,3 +1033,6 @@ msgstr "BlossomOS Switch hat dein Backup bei der Installation mitgebracht. Gib d
@@ -55,10 +55,10 @@ index 5c541bb..c03474f 100644
  
      bool finishing() const;
 diff --git a/src/qml/SessionMenu.qml b/src/qml/SessionMenu.qml
-index 6a200c5..aa7d88e 100644
+index acaf068..aa7d88e 100644
 --- a/src/qml/SessionMenu.qml
 +++ b/src/qml/SessionMenu.qml
-@@ -1,88 +1,20 @@
+@@ -1,84 +1,20 @@
 -/*
 -    SPDX-FileCopyrightText: 2026 Kristen McWilliam <kristen@kde.org>
 -
@@ -136,10 +136,6 @@ index 6a200c5..aa7d88e 100644
 -
 -            display: AbstractButton.TextBesideIcon
 -            flat: false
--
--            ToolTip.text: text
--            ToolTip.visible: hovered || activeFocus
--            ToolTip.delay: Kirigami.Units.toolTipDelay
 -
 -            onClicked: filteredModel.trigger(index)
 -

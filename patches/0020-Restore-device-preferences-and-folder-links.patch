@@ -1,4 +1,4 @@
-From 1de450bb81534d8abd6a3eda5e9bcb0d3aaf5e9d Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Codex <codex@localhost>
 Date: Fri, 30 Oct 2026 14:52:40 +0100
 Subject: [PATCH] Restore device preferences and explicit folder links from

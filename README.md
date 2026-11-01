@@ -93,5 +93,4 @@ The upstream tree installs a clang-format pre-commit hook. Run `git clang-format
 | 0017 | Avatar chooser | Clicking the picture on the About You page opens a grid of Plasma avatars, the Windows picture from a backup, initials or a webcam photo; the choice becomes the AccountsService icon. |
 | 0019 | Set up later | Replaces the landing page power actions with “Später einrichten”, using `clock-symbolic`; shuts down without confirmation and leaves setup incomplete. Preview mode performs no shutdown. |
 | 0020 | Device preferences and folder links | Restores selected display, input, accessibility, power and audio preferences at first login. Matches supported devices conservatively and retries failed groups. Folder shortcuts become explicit KDE URL links; stock Windows backgrounds select Blossom Rays. |
-
-Patch 0020 uses Python 3, kscreen-doctor, kwriteconfig6, qdbus-qt6, dbus-send and pactl in the new user session. Run its tests in the prepared source tree with `python3 -m unittest discover -s tests -p test_switchpreferences.py`.
+| 0021 | Desktop icon layout | Restores vertical columns, automatic arrangement or manual icon positions from Switch backups after desktop/PWA links are created. Resolves renamed links and maps Windows coordinates to Plasma grid cells; icons remain movable. |

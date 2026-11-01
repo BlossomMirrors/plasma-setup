@@ -16,10 +16,10 @@ Subject: [PATCH 14/18] Reorder the pages
  9 files changed, 16 insertions(+), 12 deletions(-)
 
 diff --git a/docs/CUSTOM_MODULES.md b/docs/CUSTOM_MODULES.md
-index 13a67b1..c3e706b 100644
+index 1d3dd14..85da770 100644
 --- a/docs/CUSTOM_MODULES.md
 +++ b/docs/CUSTOM_MODULES.md
-@@ -68,10 +68,14 @@ sequence. Lower numbers appear earlier. Reference values from built-in modules:
+@@ -69,10 +69,14 @@ sequence. Lower numbers appear earlier. Reference values from built-in modules:
  
  - `0` - Language selection (first page)
  - `5` - Keyboard layout
@@ -39,10 +39,10 @@ index 13a67b1..c3e706b 100644
  
  Choose a weight value between existing modules to position your custom page
 diff --git a/modules/account/metadata.json b/modules/account/metadata.json
-index c10c7be..8fd910f 100644
+index 6b50c67..0d7f238 100644
 --- a/modules/account/metadata.json
 +++ b/modules/account/metadata.json
-@@ -119,5 +119,5 @@
+@@ -136,5 +136,5 @@
      },
      "NoDisplay": true,
      "X-KDE-ParentApp": "org.kde.plasmasetup",
@@ -83,10 +83,10 @@ index a939cb9..f62470a 100644
 +    "X-KDE-Weight": 30
  }
 diff --git a/modules/hostname/metadata.json b/modules/hostname/metadata.json
-index e53e6ec..6110966 100644
+index eada39b..de6913a 100644
 --- a/modules/hostname/metadata.json
 +++ b/modules/hostname/metadata.json
-@@ -117,5 +117,5 @@
+@@ -133,5 +133,5 @@
      },
      "NoDisplay": true,
      "X-KDE-ParentApp": "org.kde.plasmasetup",
@@ -94,10 +94,10 @@ index e53e6ec..6110966 100644
 +    "X-KDE-Weight": 10
  }
 diff --git a/modules/time/metadata.json b/modules/time/metadata.json
-index 5b9a186..73bd1af 100644
+index e32ff90..c540d2f 100644
 --- a/modules/time/metadata.json
 +++ b/modules/time/metadata.json
-@@ -160,5 +160,5 @@
+@@ -183,5 +183,5 @@
      },
      "NoDisplay": true,
      "X-KDE-ParentApp": "org.kde.plasmasetup",
@@ -116,10 +116,10 @@ index 486c6c7..cdf14e4 100644
 +    "X-KDE-Weight": 50
  }
 diff --git a/modules/wifi/metadata.json b/modules/wifi/metadata.json
-index cc877f6..25674f6 100644
+index 2cc8ff7..f76baf8 100644
 --- a/modules/wifi/metadata.json
 +++ b/modules/wifi/metadata.json
-@@ -119,5 +119,5 @@
+@@ -137,5 +137,5 @@
      },
      "NoDisplay": true,
      "X-KDE-ParentApp": "org.kde.plasmasetup",

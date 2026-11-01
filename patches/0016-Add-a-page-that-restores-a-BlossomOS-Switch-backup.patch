@@ -94,10 +94,10 @@ Subject: [PATCH 16/18] Add a page that restores a BlossomOS Switch backup
  create mode 100644 src/components/qml/StepList.qml
 
 diff --git a/docs/CUSTOM_MODULES.md b/docs/CUSTOM_MODULES.md
-index c3e706b..197458f 100644
+index 85da770..a8b1cd1 100644
 --- a/docs/CUSTOM_MODULES.md
 +++ b/docs/CUSTOM_MODULES.md
-@@ -68,14 +68,15 @@ sequence. Lower numbers appear earlier. Reference values from built-in modules:
+@@ -69,14 +69,15 @@ sequence. Lower numbers appear earlier. Reference values from built-in modules:
  
  - `0` - Language selection (first page)
  - `5` - Keyboard layout
@@ -159,10 +159,10 @@ index 785f646..6fe9656 100644
  add_subdirectory(updatesutil)
  add_subdirectory(wallpaperutil)
 diff --git a/modules/account/contents/ui/main.qml b/modules/account/contents/ui/main.qml
-index 7fc10e8..bb8bf1f 100644
+index 53c1658..c29e849 100644
 --- a/modules/account/contents/ui/main.qml
 +++ b/modules/account/contents/ui/main.qml
-@@ -12,6 +12,7 @@ import org.kde.kirigamiaddons.components as KirigamiComponents
+@@ -14,6 +14,7 @@ import org.kde.kirigamiaddons.components as KirigamiComponents
  
  import org.kde.plasmasetup
  import org.kde.plasmasetup.components as PlasmaSetupComponents
@@ -170,7 +170,7 @@ index 7fc10e8..bb8bf1f 100644
  
  PlasmaSetupComponents.SetupModule {
      id: root
-@@ -30,7 +31,13 @@ PlasmaSetupComponents.SetupModule {
+@@ -32,7 +33,13 @@ PlasmaSetupComponents.SetupModule {
  
      nextEnabled: root.usernameValid && passwordField.text.length > 0 && repeatField.text === passwordField.text
  
@@ -184,7 +184,7 @@ index 7fc10e8..bb8bf1f 100644
          fullNameField.forceActiveFocus();
      }
  
-@@ -83,6 +90,7 @@ PlasmaSetupComponents.SetupModule {
+@@ -85,6 +92,7 @@ PlasmaSetupComponents.SetupModule {
                      implicitHeight: implicitWidth
  
                      name: fullNameField.text
@@ -193,10 +193,10 @@ index 7fc10e8..bb8bf1f 100644
                      // Disabled so it doesn't act like a button, instead we use it
                      // as a simple avatar with user initial for now.
 diff --git a/modules/account/metadata.json b/modules/account/metadata.json
-index 8fd910f..9aa156a 100644
+index 0d7f238..ac5b0ec 100644
 --- a/modules/account/metadata.json
 +++ b/modules/account/metadata.json
-@@ -119,5 +119,5 @@
+@@ -136,5 +136,5 @@
      },
      "NoDisplay": true,
      "X-KDE-ParentApp": "org.kde.plasmasetup",
@@ -799,7 +799,7 @@ index 0000000..1e61a86
 +QString change(const QString &id, bool install, GCancellable *cancellable, TransactionProgress *progress);
 +}
 diff --git a/modules/hostname/contents/ui/main.qml b/modules/hostname/contents/ui/main.qml
-index d2f4001..a453c49 100644
+index b6cabd4..075c6ab 100644
 --- a/modules/hostname/contents/ui/main.qml
 +++ b/modules/hostname/contents/ui/main.qml
 @@ -14,6 +14,7 @@ import org.kde.plasmasetup
@@ -828,10 +828,10 @@ index d2f4001..a453c49 100644
          // user shares.
          if (HostnameUtil.hostname === "localhost" || HostnameUtil.hostname === "localhost.localdomain") {
 diff --git a/modules/hostname/metadata.json b/modules/hostname/metadata.json
-index 6110966..4e90594 100644
+index de6913a..56360ef 100644
 --- a/modules/hostname/metadata.json
 +++ b/modules/hostname/metadata.json
-@@ -117,5 +117,5 @@
+@@ -133,5 +133,5 @@
      },
      "NoDisplay": true,
      "X-KDE-ParentApp": "org.kde.plasmasetup",
@@ -3103,7 +3103,7 @@ index 0000000..b3fe323
 +    GCancellable *m_cancellable = nullptr;
 +};
 diff --git a/po/ar/org.kde.plasmasetup.po b/po/ar/org.kde.plasmasetup.po
-index 404ccdb..a9f8ca7 100644
+index d8cb584..6118212 100644
 --- a/po/ar/org.kde.plasmasetup.po
 +++ b/po/ar/org.kde.plasmasetup.po
 @@ -379,6 +379,215 @@ msgctxt "@action:button"
@@ -3353,7 +3353,7 @@ index 404ccdb..a9f8ca7 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/az/org.kde.plasmasetup.po b/po/az/org.kde.plasmasetup.po
-index 85407db..d3f01eb 100644
+index 03fb0a9..2ed84c6 100644
 --- a/po/az/org.kde.plasmasetup.po
 +++ b/po/az/org.kde.plasmasetup.po
 @@ -383,6 +383,207 @@ msgctxt "@action:button"
@@ -3595,14 +3595,13 @@ index 85407db..d3f01eb 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/ca/org.kde.plasmasetup.po b/po/ca/org.kde.plasmasetup.po
-index c375fe0..7774c8a 100644
+index 8d5f850..eaef257 100644
 --- a/po/ca/org.kde.plasmasetup.po
 +++ b/po/ca/org.kde.plasmasetup.po
-@@ -383,3 +383,230 @@ msgstr "Següent"
- msgctxt "@action:button"
+@@ -384,6 +384,233 @@ msgctxt "@action:button"
  msgid "Finish"
  msgstr "Finalitza"
-+
+ 
 +#: modules/switch/contents/ui/main.qml:130
 +#, kde-format
 +msgid "Your Files Are Here"
@@ -3829,8 +3828,12 @@ index c375fe0..7774c8a 100644
 +msgctxt "@action:button"
 +msgid "Log Out"
 +msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Ajusteu la mida dels elements a la pantalla."
+ 
 diff --git a/po/ca@valencia/org.kde.plasmasetup.po b/po/ca@valencia/org.kde.plasmasetup.po
-index 350fe15..e111a0e 100644
+index 58eec7a..612fe33 100644
 --- a/po/ca@valencia/org.kde.plasmasetup.po
 +++ b/po/ca@valencia/org.kde.plasmasetup.po
 @@ -386,3 +386,230 @@ msgstr "Següent"
@@ -4065,10 +4068,10 @@ index 350fe15..e111a0e 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/cs/org.kde.plasmasetup.po b/po/cs/org.kde.plasmasetup.po
-index 7ae1772..12fd48b 100644
+index 105900b..1b79736 100644
 --- a/po/cs/org.kde.plasmasetup.po
 +++ b/po/cs/org.kde.plasmasetup.po
-@@ -381,3 +381,232 @@ msgstr "Další"
+@@ -382,3 +382,232 @@ msgstr "Další"
  msgctxt "@action:button"
  msgid "Finish"
  msgstr "Dokončit"
@@ -4302,7 +4305,7 @@ index 7ae1772..12fd48b 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 481605e..3585b01 100644
+index c910620..9c6938d 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -608,6 +608,207 @@ msgstr ""
@@ -4544,7 +4547,7 @@ index 481605e..3585b01 100644
 +msgid "Choose Another Option"
 +msgstr "Andere Option wählen"
 diff --git a/po/en_GB/org.kde.plasmasetup.po b/po/en_GB/org.kde.plasmasetup.po
-index 48996bf..31f3b7b 100644
+index 7fbf8a5..32226da 100644
 --- a/po/en_GB/org.kde.plasmasetup.po
 +++ b/po/en_GB/org.kde.plasmasetup.po
 @@ -376,6 +376,207 @@ msgctxt "@action:button"
@@ -4786,7 +4789,7 @@ index 48996bf..31f3b7b 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/es/org.kde.plasmasetup.po b/po/es/org.kde.plasmasetup.po
-index 13ed8a3..b179958 100644
+index 95f98c0..3a79a77 100644
 --- a/po/es/org.kde.plasmasetup.po
 +++ b/po/es/org.kde.plasmasetup.po
 @@ -386,3 +386,230 @@ msgstr "Siguiente"
@@ -5021,7 +5024,7 @@ index 13ed8a3..b179958 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/eu/org.kde.plasmasetup.po b/po/eu/org.kde.plasmasetup.po
-index dd5b813..60f79e5 100644
+index c3e66d0..1e1a524 100644
 --- a/po/eu/org.kde.plasmasetup.po
 +++ b/po/eu/org.kde.plasmasetup.po
 @@ -382,6 +382,207 @@ msgctxt "@action:button"
@@ -5263,7 +5266,7 @@ index dd5b813..60f79e5 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/fi/org.kde.plasmasetup.po b/po/fi/org.kde.plasmasetup.po
-index 3e54fee..b01b3f0 100644
+index 872cf31..a419c85 100644
 --- a/po/fi/org.kde.plasmasetup.po
 +++ b/po/fi/org.kde.plasmasetup.po
 @@ -379,6 +379,207 @@ msgctxt "@action:button"
@@ -5505,7 +5508,7 @@ index 3e54fee..b01b3f0 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/fr/org.kde.plasmasetup.po b/po/fr/org.kde.plasmasetup.po
-index b023a06..f5c4a7f 100644
+index 554d55c..adb98ff 100644
 --- a/po/fr/org.kde.plasmasetup.po
 +++ b/po/fr/org.kde.plasmasetup.po
 @@ -385,6 +385,207 @@ msgctxt "@action:button"
@@ -5747,7 +5750,7 @@ index b023a06..f5c4a7f 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/ga/org.kde.plasmasetup.po b/po/ga/org.kde.plasmasetup.po
-index 03745e4..0c54071 100644
+index 3e3ee18..f76fe27 100644
 --- a/po/ga/org.kde.plasmasetup.po
 +++ b/po/ga/org.kde.plasmasetup.po
 @@ -369,3 +369,236 @@ msgstr ""
@@ -5988,7 +5991,7 @@ index 03745e4..0c54071 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/gl/org.kde.plasmasetup.po b/po/gl/org.kde.plasmasetup.po
-index d757608..86a4004 100644
+index 63f0ab8..07a2b6f 100644
 --- a/po/gl/org.kde.plasmasetup.po
 +++ b/po/gl/org.kde.plasmasetup.po
 @@ -384,6 +384,207 @@ msgctxt "@action:button"
@@ -6230,7 +6233,7 @@ index d757608..86a4004 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/he/org.kde.plasmasetup.po b/po/he/org.kde.plasmasetup.po
-index d4b73ab..c3a8950 100644
+index 6859e9a..d1d0ea8 100644
 --- a/po/he/org.kde.plasmasetup.po
 +++ b/po/he/org.kde.plasmasetup.po
 @@ -379,6 +379,211 @@ msgctxt "@action:button"
@@ -6476,7 +6479,7 @@ index d4b73ab..c3a8950 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/hu/org.kde.plasmasetup.po b/po/hu/org.kde.plasmasetup.po
-index e24fbe4..4291019 100644
+index fb5bdf0..2c6d511 100644
 --- a/po/hu/org.kde.plasmasetup.po
 +++ b/po/hu/org.kde.plasmasetup.po
 @@ -381,3 +381,230 @@ msgstr "Következő"
@@ -6711,7 +6714,7 @@ index e24fbe4..4291019 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/ia/org.kde.plasmasetup.po b/po/ia/org.kde.plasmasetup.po
-index 6271e3e..f7841b3 100644
+index 55c8401..0c44a92 100644
 --- a/po/ia/org.kde.plasmasetup.po
 +++ b/po/ia/org.kde.plasmasetup.po
 @@ -381,6 +381,207 @@ msgctxt "@action:button"
@@ -6953,7 +6956,7 @@ index 6271e3e..f7841b3 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/it/org.kde.plasmasetup.po b/po/it/org.kde.plasmasetup.po
-index 539ef08..9054a13 100644
+index b0b3da6..b7bf72c 100644
 --- a/po/it/org.kde.plasmasetup.po
 +++ b/po/it/org.kde.plasmasetup.po
 @@ -381,6 +381,207 @@ msgctxt "@action:button"
@@ -7195,7 +7198,7 @@ index 539ef08..9054a13 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/ja/org.kde.plasmasetup.po b/po/ja/org.kde.plasmasetup.po
-index 805f800..54ba41f 100644
+index 00ef082..4dadd8e 100644
 --- a/po/ja/org.kde.plasmasetup.po
 +++ b/po/ja/org.kde.plasmasetup.po
 @@ -377,3 +377,228 @@ msgstr "次へ"
@@ -7428,7 +7431,7 @@ index 805f800..54ba41f 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/ka/org.kde.plasmasetup.po b/po/ka/org.kde.plasmasetup.po
-index 7d55954..1d84cfd 100644
+index 40b2659..56158ff 100644
 --- a/po/ka/org.kde.plasmasetup.po
 +++ b/po/ka/org.kde.plasmasetup.po
 @@ -381,6 +381,207 @@ msgctxt "@action:button"
@@ -7670,7 +7673,7 @@ index 7d55954..1d84cfd 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/ko/org.kde.plasmasetup.po b/po/ko/org.kde.plasmasetup.po
-index 94b8b0e..c81eb52 100644
+index 08d5b4a..4ce4430 100644
 --- a/po/ko/org.kde.plasmasetup.po
 +++ b/po/ko/org.kde.plasmasetup.po
 @@ -382,6 +382,205 @@ msgctxt "@action:button"
@@ -7910,7 +7913,7 @@ index 94b8b0e..c81eb52 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/lt/org.kde.plasmasetup.po b/po/lt/org.kde.plasmasetup.po
-index 8c89363..9081b99 100644
+index 8775eec..0a2d3db 100644
 --- a/po/lt/org.kde.plasmasetup.po
 +++ b/po/lt/org.kde.plasmasetup.po
 @@ -387,3 +387,234 @@ msgstr "Kitas"
@@ -8149,7 +8152,7 @@ index 8c89363..9081b99 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/lv/org.kde.plasmasetup.po b/po/lv/org.kde.plasmasetup.po
-index d483943..94ca85f 100644
+index 52bf01f..56ba54a 100644
 --- a/po/lv/org.kde.plasmasetup.po
 +++ b/po/lv/org.kde.plasmasetup.po
 @@ -381,6 +381,209 @@ msgctxt "@action:button"
@@ -8393,7 +8396,7 @@ index d483943..94ca85f 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/nb/org.kde.plasmasetup.po b/po/nb/org.kde.plasmasetup.po
-index c2f47ed..d46dce0 100644
+index 2e524f4..38eb2b1 100644
 --- a/po/nb/org.kde.plasmasetup.po
 +++ b/po/nb/org.kde.plasmasetup.po
 @@ -380,3 +380,230 @@ msgstr "Neste"
@@ -8628,7 +8631,7 @@ index c2f47ed..d46dce0 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/nl/org.kde.plasmasetup.po b/po/nl/org.kde.plasmasetup.po
-index 84d107f..3a06d34 100644
+index 5a32813..a679cc5 100644
 --- a/po/nl/org.kde.plasmasetup.po
 +++ b/po/nl/org.kde.plasmasetup.po
 @@ -382,6 +382,207 @@ msgctxt "@action:button"
@@ -8870,7 +8873,7 @@ index 84d107f..3a06d34 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/nn/org.kde.plasmasetup.po b/po/nn/org.kde.plasmasetup.po
-index 311ac12..7c7ca0c 100644
+index f86a0c8..d3a4721 100644
 --- a/po/nn/org.kde.plasmasetup.po
 +++ b/po/nn/org.kde.plasmasetup.po
 @@ -379,3 +379,230 @@ msgstr "Neste"
@@ -9105,7 +9108,7 @@ index 311ac12..7c7ca0c 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/pl/org.kde.plasmasetup.po b/po/pl/org.kde.plasmasetup.po
-index 13a486e..ff0f5d9 100644
+index 410270b..ac58f9d 100644
 --- a/po/pl/org.kde.plasmasetup.po
 +++ b/po/pl/org.kde.plasmasetup.po
 @@ -384,6 +384,209 @@ msgctxt "@action:button"
@@ -9349,7 +9352,7 @@ index 13a486e..ff0f5d9 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/pt_BR/org.kde.plasmasetup.po b/po/pt_BR/org.kde.plasmasetup.po
-index ad19790..405f2c2 100644
+index 156d33c..4bad29b 100644
 --- a/po/pt_BR/org.kde.plasmasetup.po
 +++ b/po/pt_BR/org.kde.plasmasetup.po
 @@ -381,6 +381,207 @@ msgctxt "@action:button"
@@ -9591,7 +9594,7 @@ index ad19790..405f2c2 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/ro/org.kde.plasmasetup.po b/po/ro/org.kde.plasmasetup.po
-index 86da88d..99997e5 100644
+index 982d16f..a34b3f7 100644
 --- a/po/ro/org.kde.plasmasetup.po
 +++ b/po/ro/org.kde.plasmasetup.po
 @@ -383,3 +383,232 @@ msgstr "Următor"
@@ -9828,10 +9831,10 @@ index 86da88d..99997e5 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/ru/org.kde.plasmasetup.po b/po/ru/org.kde.plasmasetup.po
-index ed3a937..f07b23d 100644
+index f3f1cf4..06df9ab 100644
 --- a/po/ru/org.kde.plasmasetup.po
 +++ b/po/ru/org.kde.plasmasetup.po
-@@ -382,6 +382,211 @@ msgctxt "@action:button"
+@@ -383,6 +383,211 @@ msgctxt "@action:button"
  msgid "Finish"
  msgstr "Завершить"
  
@@ -10043,7 +10046,7 @@ index ed3a937..f07b23d 100644
  #~ msgid "Adjust the size of elements on the screen."
  #~ msgstr "Настройте размер элементов на экране."
  
-@@ -436,3 +641,29 @@ msgstr "Завершить"
+@@ -437,3 +642,29 @@ msgstr "Завершить"
  
  #~ msgid "Initial Start"
  #~ msgstr "Начальный запуск"
@@ -10074,7 +10077,7 @@ index ed3a937..f07b23d 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/sk/org.kde.plasmasetup.po b/po/sk/org.kde.plasmasetup.po
-index a043cb2..206babb 100644
+index 0900d0c..41a2a2e 100644
 --- a/po/sk/org.kde.plasmasetup.po
 +++ b/po/sk/org.kde.plasmasetup.po
 @@ -377,6 +377,209 @@ msgctxt "@action:button"
@@ -10318,7 +10321,7 @@ index a043cb2..206babb 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/sl/org.kde.plasmasetup.po b/po/sl/org.kde.plasmasetup.po
-index 251176c..768968a 100644
+index f458049..6779dbc 100644
 --- a/po/sl/org.kde.plasmasetup.po
 +++ b/po/sl/org.kde.plasmasetup.po
 @@ -378,6 +378,211 @@ msgctxt "@action:button"
@@ -10564,7 +10567,7 @@ index 251176c..768968a 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/sv/org.kde.plasmasetup.po b/po/sv/org.kde.plasmasetup.po
-index e2645fc..5f25a4b 100644
+index 68e7bd5..d274f04 100644
 --- a/po/sv/org.kde.plasmasetup.po
 +++ b/po/sv/org.kde.plasmasetup.po
 @@ -379,6 +379,207 @@ msgctxt "@action:button"
@@ -10806,7 +10809,7 @@ index e2645fc..5f25a4b 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/tr/org.kde.plasmasetup.po b/po/tr/org.kde.plasmasetup.po
-index 5f22bb2..258eea0 100644
+index a2c318f..0cbd35f 100644
 --- a/po/tr/org.kde.plasmasetup.po
 +++ b/po/tr/org.kde.plasmasetup.po
 @@ -384,6 +384,207 @@ msgctxt "@action:button"
@@ -11048,7 +11051,7 @@ index 5f22bb2..258eea0 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/uk/org.kde.plasmasetup.po b/po/uk/org.kde.plasmasetup.po
-index 9685683..8c7438f 100644
+index 145be95..05b59e4 100644
 --- a/po/uk/org.kde.plasmasetup.po
 +++ b/po/uk/org.kde.plasmasetup.po
 @@ -381,6 +381,211 @@ msgctxt "@action:button"
@@ -11294,7 +11297,7 @@ index 9685683..8c7438f 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/zh_CN/org.kde.plasmasetup.po b/po/zh_CN/org.kde.plasmasetup.po
-index 13d8141..83e959d 100644
+index cea7057..439812c 100644
 --- a/po/zh_CN/org.kde.plasmasetup.po
 +++ b/po/zh_CN/org.kde.plasmasetup.po
 @@ -372,3 +372,228 @@ msgstr "下一步"
@@ -11527,7 +11530,7 @@ index 13d8141..83e959d 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/zh_TW/org.kde.plasmasetup.po b/po/zh_TW/org.kde.plasmasetup.po
-index 97ef002..841a752 100644
+index b4cba95..e02ccfe 100644
 --- a/po/zh_TW/org.kde.plasmasetup.po
 +++ b/po/zh_TW/org.kde.plasmasetup.po
 @@ -373,6 +373,205 @@ msgctxt "@action:button"
@@ -11767,10 +11770,10 @@ index 97ef002..841a752 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/src/accountcontroller.cpp b/src/accountcontroller.cpp
-index 2702369..f817ca0 100644
+index 4e4695d..4634b41 100644
 --- a/src/accountcontroller.cpp
 +++ b/src/accountcontroller.cpp
-@@ -143,6 +143,35 @@ bool AccountController::createUser()
+@@ -144,6 +144,35 @@ bool AccountController::createUser()
      return true;
  }
  
@@ -11807,10 +11810,10 @@ index 2702369..f817ca0 100644
  {
      return m_password;
 diff --git a/src/accountcontroller.h b/src/accountcontroller.h
-index c988a48..8cd8d43 100644
+index 8844d58..5c93171 100644
 --- a/src/accountcontroller.h
 +++ b/src/accountcontroller.h
-@@ -10,6 +10,7 @@
+@@ -11,6 +11,7 @@
  #include <QStringList>
  #include <qqmlintegration.h>
  
@@ -11818,7 +11821,7 @@ index c988a48..8cd8d43 100644
  #include <utility>
  
  class AccountController : public QObject
-@@ -60,6 +61,8 @@ public:
+@@ -61,6 +62,8 @@ public:
       */
      Q_INVOKABLE bool createUser();
  
@@ -12588,10 +12591,10 @@ index 0d6cfb7..0c72eb2 100644
      /**
       * Adds a user to the provided supplementary groups using usermod.
 diff --git a/src/auth/org.kde.plasmasetup.actions b/src/auth/org.kde.plasmasetup.actions
-index 1ba631e..09b0247 100644
+index 3fe92f8..0858056 100644
 --- a/src/auth/org.kde.plasmasetup.actions
 +++ b/src/auth/org.kde.plasmasetup.actions
-@@ -586,3 +586,24 @@ Name[de]=Festplatten automatisch entsperren
+@@ -695,3 +695,24 @@ Name[de]=Festplatten automatisch entsperren
  Description=Let the TPM unlock the encrypted disks on start
  Description[de]=Das TPM die verschlüsselten Festplatten beim Start entsperren lassen
  Policy=no
@@ -13075,10 +13078,10 @@ index 4070f2c..5c541bb 100644
      /**
       * Logs out of the plasma-setup user.
 diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
-index 6a9f11b..b1c0aa5 100644
+index 0dcf69c..8bdd315 100644
 --- a/src/qml/Wizard.qml
 +++ b/src/qml/Wizard.qml
-@@ -299,6 +299,48 @@ Kirigami.Page {
+@@ -320,6 +320,48 @@ Kirigami.Page {
                          delegate: PageDelegate {}
                          Layout.alignment: Qt.AlignHCenter
                      }
@@ -13127,7 +13130,7 @@ index 6a9f11b..b1c0aa5 100644
                  }
  
                  // bottom footer
-@@ -315,7 +357,7 @@ Kirigami.Page {
+@@ -336,7 +378,7 @@ Kirigami.Page {
                          text: i18nc("@action:button", "Back")
                          icon.name: "go-previous-symbolic"
  
@@ -13135,8 +13138,8 @@ index 6a9f11b..b1c0aa5 100644
 +                        enabled: root.currentModule.backEnabled && !InitialStartUtil.finishing
  
                          onClicked: root.requestPreviousPage()
-                     }
-@@ -345,7 +387,7 @@ Kirigami.Page {
+ 
+@@ -374,7 +416,7 @@ Kirigami.Page {
                          text: i18nc("@action:button", "Finish")
                          icon.name: "dialog-ok-symbolic"
  

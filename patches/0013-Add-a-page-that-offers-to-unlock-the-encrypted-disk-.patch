@@ -558,7 +558,7 @@ index 0000000..2f714ea
 +    State m_state = Idle;
 +};
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 0e569fd..f1f07ae 100644
+index 9f04f5c..1ec3b53 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -539,6 +539,76 @@ msgctxt "%1 is a browser, %2 the error"
@@ -863,10 +863,10 @@ index 1593afe..0d6cfb7 100644
      /**
       * Adds a user to the provided supplementary groups using usermod.
 diff --git a/src/auth/org.kde.plasmasetup.actions b/src/auth/org.kde.plasmasetup.actions
-index 4440cc0..1ba631e 100644
+index 7d8274a..3fe92f8 100644
 --- a/src/auth/org.kde.plasmasetup.actions
 +++ b/src/auth/org.kde.plasmasetup.actions
-@@ -572,3 +572,17 @@ Description[uk]=Встановити налаштування тимчасово
+@@ -681,3 +681,17 @@ Description[uk]=Встановити налаштування тимчасово
  Description[zh_CN]=设置新建用户的显示管理器临时自动登录配置
  Description[zh_TW]=為新建立的使用者設定登入畫面的暫時性自動登入配置
  Policy=no

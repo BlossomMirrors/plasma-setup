@@ -22,7 +22,7 @@ to a new accent colour over 5 seconds instead of blinking out.
  .../metadata.json.license                     |   0
  modules/prepare/CMakeLists.txt                |  11 -
  modules/prepare/contents/ui/main.qml          |  87 -----
- modules/prepare/metadata.json                 | 123 -------
+ modules/prepare/metadata.json                 | 140 --------
  modules/prepare/metadata.json.license         |   3 -
  modules/prepareutil/prepareutil.cpp           | 151 ++++++++-
  modules/prepareutil/prepareutil.h             |  12 +
@@ -32,7 +32,7 @@ to a new accent colour over 5 seconds instead of blinking out.
  po/de/org.kde.plasmasetup.po                  |  43 ++-
  src/auth/authhelper.cpp                       |  34 +-
  src/qml/Backdrop.qml                          | 144 +++++++-
- 17 files changed, 825 insertions(+), 428 deletions(-)
+ 17 files changed, 825 insertions(+), 445 deletions(-)
  rename modules/{wallpaper => appearance}/CMakeLists.txt (56%)
  create mode 100644 modules/appearance/contents/ui/main.qml
  rename modules/{wallpaper => appearance}/metadata.json (50%)
@@ -566,10 +566,10 @@ index 422088a..0000000
 -}
 diff --git a/modules/prepare/metadata.json b/modules/prepare/metadata.json
 deleted file mode 100644
-index d2cf89f..0000000
+index 998717b..0000000
 --- a/modules/prepare/metadata.json
 +++ /dev/null
-@@ -1,123 +0,0 @@
+@@ -1,140 +0,0 @@
 -{
 -    "KPackageStructure": "KDE/PlasmaSetup",
 -    "KPlugin": {
@@ -602,14 +602,20 @@ index d2cf89f..0000000
 -                "Name[nb]": "Carl Schwan",
 -                "Name[nl]": "Carl Schwan",
 -                "Name[nn]": "Carl Schwan",
+-                "Name[pa]": "ਕਾਰਲ ਸਵਾਨ",
 -                "Name[pl]": "Carl Schwan",
 -                "Name[pt_BR]": "Carl Schwan",
 -                "Name[ro]": "Carl Schwan",
 -                "Name[ru]": "Carl Schwan",
 -                "Name[sk]": "Carl Schwan",
 -                "Name[sl]": "Carl Schwan",
+-                "Name[sr@ijekavian]": "Carl Schwan",
+-                "Name[sr@ijekavianlatin]": "Carl Schwan",
+-                "Name[sr@latin]": "Carl Schwan",
+-                "Name[sr]": "Carl Schwan",
 -                "Name[sv]": "Carl Schwan",
 -                "Name[tr]": "Carl Schwan",
+-                "Name[ug]": "Carl Schwan",
 -                "Name[uk]": "Carl Schwan",
 -                "Name[zh_CN]": "Carl Schwan",
 -                "Name[zh_TW]": "Carl Schwan"
@@ -618,6 +624,7 @@ index d2cf89f..0000000
 -        "Description": "Allows the user to configure the environment before using it.",
 -        "Description[ar]": "يسمح للمستخدم بتهيئة البيئة قبل استخدامها.",
 -        "Description[az]": "İstifadəçiyə mühiti istifadə etmədən öncə onu tənzimləməyə icazə vermək.",
+-        "Description[bg]": "Позволява на потребителя да конфигурира средата преди употреба.",
 -        "Description[ca@valencia]": "Permet a l'usuari configurar l'entorn abans d'utilitzar-lo.",
 -        "Description[ca]": "Permet a l'usuari configurar l'entorn abans d'utilitzar-lo.",
 -        "Description[cs]": "Umožní uživateli nastavit prostředí ještě před tím, než je začne používat.",
@@ -638,12 +645,17 @@ index d2cf89f..0000000
 -        "Description[nb]": "Tillat brukeren å sette opp miljøet før bruk.",
 -        "Description[nl]": "Staat de gebruiker toe de omgeving te configureren alvorens het te gebruiken.",
 -        "Description[nn]": "Tillat brukaren å setja opp skrivebords­miljøet før bruk.",
+-        "Description[pa]": "ਵਰਤੋਂਕਾਰ ਨੂੰ ਇਨਵਾਇਰਨਮੈਂਟ ਨੂੰ ਵਰਤਣ ਤੋਂ ਪਹਿਲਾਂ ਇਸ ਦੀ ਸੰਰਚਨਾ ਕਰਨ ਦੀ ਮਨਜ਼ੂਰੀ ਹੈ।",
 -        "Description[pl]": "Zezwól użytkownikowi na ustawienie środowiska przed jego użyciem.",
 -        "Description[pt_BR]": "Permitir que o usuário configure o ambiente antes de utilizá-lo.",
 -        "Description[ro]": "Permite utilizatorului să configureze mediul înainte de a-l folosi.",
 -        "Description[ru]": "Позволяет выполнить настройку пользовательского окружения перед началом использования.",
 -        "Description[sk]": "Umožní používateľovi nastaviť prostredie pred jeho používaním.",
 -        "Description[sl]": "Omogoča uporabniku, da konfigurira okolje pred uporabo.",
+-        "Description[sr@ijekavian]": "Омогућава кориснику да подеси окружење прије коришћења.",
+-        "Description[sr@ijekavianlatin]": "Omogućava korisniku da podesi okruženje prije korišćenja.",
+-        "Description[sr@latin]": "Omogućava korisniku da podesi okruženje pre korišćenja.",
+-        "Description[sr]": "Омогућава кориснику да подеси окружење пре коришћења.",
 -        "Description[sv]": "Låter användaren ställa in miljön innan den används.",
 -        "Description[tr]": "Kullanıcının onu kullanmadan önce ortamı yapılandırmasına olanak tanır.",
 -        "Description[uk]": "Дозволяє користувачеві налаштовувати середовище до його використання.",
@@ -667,7 +679,7 @@ index d2cf89f..0000000
 -        "Name[he]": "לפני שנתחיל…",
 -        "Name[hu]": "Mielőtt elkezdenénk…",
 -        "Name[ia]": "Ante que nos initia ...",
--        "Name[it]": "Prima di iniziare...",
+-        "Name[it]": "Prima di iniziare…",
 -        "Name[ja]": "はじめる前に…",
 -        "Name[ka]": "სანამ დავიწყებთ…",
 -        "Name[ko]": "시작하기 전에…",
@@ -676,12 +688,17 @@ index d2cf89f..0000000
 -        "Name[nb]": "Før vi kommer i gang …",
 -        "Name[nl]": "Voordat we verder gaan…",
 -        "Name[nn]": "Før me set i gang …",
+-        "Name[pa]": "ਇਸ ਤੋਂ ਪਹਿਲਾਂ ਕਿ ਅਸੀਂ ਸ਼ੁਰੂ ਕਰੀਏ…",
 -        "Name[pl]": "Zanim zaczniemy…",
 -        "Name[pt_BR]": "Antes de começarmos…",
 -        "Name[ro]": "Înainte să începem…",
 -        "Name[ru]": "До начала работы…",
 -        "Name[sk]": "Skôr než začneme…",
 -        "Name[sl]": "Preden začnemo…",
+-        "Name[sr@ijekavian]": "Прије него што почнемо…",
+-        "Name[sr@ijekavianlatin]": "Prije nego što počnemo…",
+-        "Name[sr@latin]": "Pre nego što počnemo…",
+-        "Name[sr]": "Пре него што почнемо…",
 -        "Name[sv]": "Innan vi kommer igång …",
 -        "Name[tr]": "Başlamadan Önce…",
 -        "Name[uk]": "Перш, ніж ми почнемо.",
@@ -1312,7 +1329,7 @@ index a0f1bfe..8bf83ad 100644
 +    Target m_target = DesktopAndLockScreen;
  };
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 1dc269a..0e569fd 100644
+index e397f41..9f04f5c 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -295,7 +295,7 @@ msgstr "Bitte wähle deine bevorzugte Sprache aus."

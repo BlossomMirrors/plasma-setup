@@ -478,7 +478,7 @@ index 0000000..a0f1bfe
 +    QString m_selected;
 +};
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 4501734..4a75f63 100644
+index ac891db..e83a337 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -391,6 +391,15 @@ msgctxt "@action:button"

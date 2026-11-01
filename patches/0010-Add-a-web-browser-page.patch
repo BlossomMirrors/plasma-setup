@@ -922,7 +922,7 @@ index 0000000..041a3d9
 +    GCancellable *m_cancellable = nullptr;
 +};
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index efd9e4d..1dc269a 100644
+index e9319bb..e397f41 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -448,6 +448,7 @@ msgctxt "downloaded of total size"

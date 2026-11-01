@@ -12,10 +12,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  2 files changed, 15 insertions(+), 15 deletions(-)
 
 diff --git a/modules/account/metadata.json b/modules/account/metadata.json
-index f939e9d..c10c7be 100644
+index 1eaf5c5..6b50c67 100644
 --- a/modules/account/metadata.json
 +++ b/modules/account/metadata.json
-@@ -86,7 +86,7 @@
+@@ -98,7 +98,7 @@
          "Name[ca@valencia]": "Quant a vós",
          "Name[ca]": "Quant a vós",
          "Name[cs]": "O Vás",
@@ -25,7 +25,7 @@ index f939e9d..c10c7be 100644
          "Name[eu]": "Zuri buruz",
          "Name[fi]": "Tietoa sinusta",
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 47c864b..4501734 100644
+index ff3bf8b..ac891db 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -49,7 +49,7 @@ msgid ""
@@ -36,7 +36,7 @@ index 47c864b..4501734 100644
 +"und auf alle Dateien auf dem System zugreifen kann.<nl/><nl/>Wähle ein "
  "starkes Passwort für diesen Benutzer."
  
- #: modules/account/contents/ui/main.qml:148
+ #: modules/account/contents/ui/main.qml:150
 @@ -152,23 +152,23 @@ msgid ""
  "Please configure your APN below for mobile data, further information will be "
  "available with your carrier."
@@ -93,13 +93,13 @@ index 47c864b..4501734 100644
 -msgstr "Bitte wählen Sie Ihre Tastaturbelegung und Sprache aus."
 +msgstr "Bitte wähle deine Tastaturbelegung und Sprache aus."
  
- #: modules/language/contents/ui/main.qml:41
+ #: modules/language/contents/ui/main.qml:46
  #, kde-format
  msgid "Please select your preferred language."
 -msgstr "Bitte wählen Sie Ihre bevorzugte Sprache aus."
 +msgstr "Bitte wähle deine bevorzugte Sprache aus."
  
- #: modules/language/contents/ui/main.qml:47
+ #: modules/language/contents/ui/main.qml:52
  #, kde-format
 @@ -303,12 +303,12 @@ msgstr "Dunkles Design"
  #: modules/time/contents/ui/main.qml:41

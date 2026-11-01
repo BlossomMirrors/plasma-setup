@@ -42,10 +42,10 @@ index c912e8b..69f14fd 100644
      setTransientHostname(hostname);
  }
 diff --git a/modules/languageutil/languageutil.cpp b/modules/languageutil/languageutil.cpp
-index 9d3f01e..f7d9f31 100644
+index 8669c0e..286f222 100644
 --- a/modules/languageutil/languageutil.cpp
 +++ b/modules/languageutil/languageutil.cpp
-@@ -64,6 +64,11 @@ void LanguageUtil::applyLanguageForCurrentSession()
+@@ -68,6 +68,11 @@ void LanguageUtil::applyLanguageForCurrentSession()
  
  void LanguageUtil::applyLanguageAsSystemDefault()
  {
@@ -241,10 +241,10 @@ index 59e8ed3..d282941 100644
          const auto leftData = left.metadata().rawData();
          const auto rightData = right.metadata().rawData();
 diff --git a/src/qml/LandingComponent.qml b/src/qml/LandingComponent.qml
-index 5422212..908233e 100644
+index 3ee0ed2..fdcbbee 100644
 --- a/src/qml/LandingComponent.qml
 +++ b/src/qml/LandingComponent.qml
-@@ -15,6 +15,12 @@ Item {
+@@ -20,6 +20,12 @@ Item {
  
      signal requestNextPage()
  
@@ -254,10 +254,10 @@ index 5422212..908233e 100644
 +        root.requestNextPage();
 +    }
 +
-     function returnToLanding() {
+     function activateLanding(): void {
          contentOpacityAnim.to = 1;
          contentOpacityAnim.restart();
-@@ -92,11 +98,7 @@ Item {
+@@ -102,11 +108,7 @@ Item {
                  text: i18n("Begin Setup")
                  icon.name: "go-next-symbolic"
  
@@ -267,11 +267,11 @@ index 5422212..908233e 100644
 -                    root.requestNextPage()
 -                }
 +                onClicked: root.begin()
-             }
-         }
  
+                 Keys.onEnterPressed: clicked()
+                 Keys.onReturnPressed: clicked()
 diff --git a/src/qml/SessionMenu.qml b/src/qml/SessionMenu.qml
-index 5369a03..6a200c5 100644
+index 5251583..acaf068 100644
 --- a/src/qml/SessionMenu.qml
 +++ b/src/qml/SessionMenu.qml
 @@ -11,6 +11,7 @@ import QtQuick.Controls
@@ -294,10 +294,10 @@ index 5369a03..6a200c5 100644
              systemModel.trigger(sourceIndex.row, "", null);
          }
 diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
-index b1a9032..f639eae 100644
+index b740c57..e0828ef 100644
 --- a/src/qml/Wizard.qml
 +++ b/src/qml/Wizard.qml
-@@ -156,6 +156,23 @@ Kirigami.Page {
+@@ -175,6 +175,23 @@ Kirigami.Page {
          onLoaded: root.currentIndex = 0
      }
  

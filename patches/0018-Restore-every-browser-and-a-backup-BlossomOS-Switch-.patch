@@ -464,7 +464,7 @@ index b3fe323..ebcfadc 100644
      QString m_peer;
      QString m_source;
 diff --git a/po/ar/org.kde.plasmasetup.po b/po/ar/org.kde.plasmasetup.po
-index 63037b2..4e7eef7 100644
+index aecf2e4..e084626 100644
 --- a/po/ar/org.kde.plasmasetup.po
 +++ b/po/ar/org.kde.plasmasetup.po
 @@ -778,3 +778,35 @@ msgstr ""
@@ -504,7 +504,7 @@ index 63037b2..4e7eef7 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/az/org.kde.plasmasetup.po b/po/az/org.kde.plasmasetup.po
-index dbfdd39..b1cde92 100644
+index 36efdc0..15554c1 100644
 --- a/po/az/org.kde.plasmasetup.po
 +++ b/po/az/org.kde.plasmasetup.po
 @@ -744,3 +744,35 @@ msgstr ""
@@ -544,14 +544,13 @@ index dbfdd39..b1cde92 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ca/org.kde.plasmasetup.po b/po/ca/org.kde.plasmasetup.po
-index 8068a68..3de528e 100644
+index 3fb5581..ba3fba3 100644
 --- a/po/ca/org.kde.plasmasetup.po
 +++ b/po/ca/org.kde.plasmasetup.po
-@@ -666,3 +666,35 @@ msgstr ""
- msgctxt "@action:button"
+@@ -667,6 +667,38 @@ msgctxt "@action:button"
  msgid "Use Photo"
  msgstr ""
-+
+ 
 +#: modules/switch/contents/ui/main.qml
 +#, kde-format
 +msgctxt "%1 is a link"
@@ -583,8 +582,12 @@ index 8068a68..3de528e 100644
 +msgctxt "@item where a backup is stored"
 +msgid "This computer"
 +msgstr ""
++
+ #~ msgid "Adjust the size of elements on the screen."
+ #~ msgstr "Ajusteu la mida dels elements a la pantalla."
+ 
 diff --git a/po/ca@valencia/org.kde.plasmasetup.po b/po/ca@valencia/org.kde.plasmasetup.po
-index a10388e..e225bd4 100644
+index 82bb165..129d7b8 100644
 --- a/po/ca@valencia/org.kde.plasmasetup.po
 +++ b/po/ca@valencia/org.kde.plasmasetup.po
 @@ -669,3 +669,35 @@ msgstr ""
@@ -624,10 +627,10 @@ index a10388e..e225bd4 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/cs/org.kde.plasmasetup.po b/po/cs/org.kde.plasmasetup.po
-index 4af7cf5..adff5da 100644
+index b234214..117aa56 100644
 --- a/po/cs/org.kde.plasmasetup.po
 +++ b/po/cs/org.kde.plasmasetup.po
-@@ -666,3 +666,35 @@ msgstr ""
+@@ -667,3 +667,35 @@ msgstr ""
  msgctxt "@action:button"
  msgid "Use Photo"
  msgstr ""
@@ -664,7 +667,7 @@ index 4af7cf5..adff5da 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
-index 6564bbd..6a16ce2 100644
+index 5e2cd04..264fceb 100644
 --- a/po/de/org.kde.plasmasetup.po
 +++ b/po/de/org.kde.plasmasetup.po
 @@ -1001,3 +1001,35 @@ msgstr "Wähle dein Backup"
@@ -704,7 +707,7 @@ index 6564bbd..6a16ce2 100644
 +msgid "This computer"
 +msgstr "Dieser Computer"
 diff --git a/po/en_GB/org.kde.plasmasetup.po b/po/en_GB/org.kde.plasmasetup.po
-index b910634..5c92e1e 100644
+index b03b51f..d132a52 100644
 --- a/po/en_GB/org.kde.plasmasetup.po
 +++ b/po/en_GB/org.kde.plasmasetup.po
 @@ -712,3 +712,35 @@ msgstr ""
@@ -744,7 +747,7 @@ index b910634..5c92e1e 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/es/org.kde.plasmasetup.po b/po/es/org.kde.plasmasetup.po
-index d177184..a775e1b 100644
+index 46b0853..e03ded9 100644
 --- a/po/es/org.kde.plasmasetup.po
 +++ b/po/es/org.kde.plasmasetup.po
 @@ -669,3 +669,35 @@ msgstr ""
@@ -784,7 +787,7 @@ index d177184..a775e1b 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/eu/org.kde.plasmasetup.po b/po/eu/org.kde.plasmasetup.po
-index 4ea78c4..24f2817 100644
+index 3bf4278..cd55992 100644
 --- a/po/eu/org.kde.plasmasetup.po
 +++ b/po/eu/org.kde.plasmasetup.po
 @@ -808,3 +808,35 @@ msgstr ""
@@ -824,7 +827,7 @@ index 4ea78c4..24f2817 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/fi/org.kde.plasmasetup.po b/po/fi/org.kde.plasmasetup.po
-index 759726a..937f1b9 100644
+index 9c4d5b4..40bd561 100644
 --- a/po/fi/org.kde.plasmasetup.po
 +++ b/po/fi/org.kde.plasmasetup.po
 @@ -806,3 +806,35 @@ msgstr ""
@@ -864,7 +867,7 @@ index 759726a..937f1b9 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/fr/org.kde.plasmasetup.po b/po/fr/org.kde.plasmasetup.po
-index 867ff9a..2474341 100644
+index 0ad193a..9fffd88 100644
 --- a/po/fr/org.kde.plasmasetup.po
 +++ b/po/fr/org.kde.plasmasetup.po
 @@ -826,3 +826,35 @@ msgstr ""
@@ -904,7 +907,7 @@ index 867ff9a..2474341 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ga/org.kde.plasmasetup.po b/po/ga/org.kde.plasmasetup.po
-index a079225..12d30db 100644
+index 5b4cacf..5e3863e 100644
 --- a/po/ga/org.kde.plasmasetup.po
 +++ b/po/ga/org.kde.plasmasetup.po
 @@ -658,3 +658,35 @@ msgstr ""
@@ -944,7 +947,7 @@ index a079225..12d30db 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/gl/org.kde.plasmasetup.po b/po/gl/org.kde.plasmasetup.po
-index 9340c8e..59eea55 100644
+index c8efdad..522d032 100644
 --- a/po/gl/org.kde.plasmasetup.po
 +++ b/po/gl/org.kde.plasmasetup.po
 @@ -825,3 +825,35 @@ msgstr ""
@@ -984,7 +987,7 @@ index 9340c8e..59eea55 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/he/org.kde.plasmasetup.po b/po/he/org.kde.plasmasetup.po
-index e965eb2..b4acd4e 100644
+index 075c866..9f5f6a9 100644
 --- a/po/he/org.kde.plasmasetup.po
 +++ b/po/he/org.kde.plasmasetup.po
 @@ -743,3 +743,35 @@ msgstr ""
@@ -1024,7 +1027,7 @@ index e965eb2..b4acd4e 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/hu/org.kde.plasmasetup.po b/po/hu/org.kde.plasmasetup.po
-index bde211c..e1e24e7 100644
+index 3a041ea..23cb110 100644
 --- a/po/hu/org.kde.plasmasetup.po
 +++ b/po/hu/org.kde.plasmasetup.po
 @@ -664,3 +664,35 @@ msgstr ""
@@ -1064,7 +1067,7 @@ index bde211c..e1e24e7 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ia/org.kde.plasmasetup.po b/po/ia/org.kde.plasmasetup.po
-index 141eeed..96810db 100644
+index 4fd6d0b..084e7fc 100644
 --- a/po/ia/org.kde.plasmasetup.po
 +++ b/po/ia/org.kde.plasmasetup.po
 @@ -782,3 +782,35 @@ msgstr ""
@@ -1104,7 +1107,7 @@ index 141eeed..96810db 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/it/org.kde.plasmasetup.po b/po/it/org.kde.plasmasetup.po
-index f949d68..291e0f1 100644
+index ddf4543..44dae05 100644
 --- a/po/it/org.kde.plasmasetup.po
 +++ b/po/it/org.kde.plasmasetup.po
 @@ -820,3 +820,35 @@ msgstr ""
@@ -1144,7 +1147,7 @@ index f949d68..291e0f1 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ja/org.kde.plasmasetup.po b/po/ja/org.kde.plasmasetup.po
-index 58901c6..e7a05f1 100644
+index 0c0f721..f1bef65 100644
 --- a/po/ja/org.kde.plasmasetup.po
 +++ b/po/ja/org.kde.plasmasetup.po
 @@ -658,3 +658,35 @@ msgstr ""
@@ -1184,7 +1187,7 @@ index 58901c6..e7a05f1 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ka/org.kde.plasmasetup.po b/po/ka/org.kde.plasmasetup.po
-index d11a458..6c0721a 100644
+index 43bcb58..4f3282e 100644
 --- a/po/ka/org.kde.plasmasetup.po
 +++ b/po/ka/org.kde.plasmasetup.po
 @@ -776,3 +776,35 @@ msgstr ""
@@ -1224,7 +1227,7 @@ index d11a458..6c0721a 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ko/org.kde.plasmasetup.po b/po/ko/org.kde.plasmasetup.po
-index 896796e..4a3dd1d 100644
+index 4a32741..c0ce421 100644
 --- a/po/ko/org.kde.plasmasetup.po
 +++ b/po/ko/org.kde.plasmasetup.po
 @@ -799,3 +799,35 @@ msgstr ""
@@ -1264,7 +1267,7 @@ index 896796e..4a3dd1d 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/lt/org.kde.plasmasetup.po b/po/lt/org.kde.plasmasetup.po
-index ce00599..d7ffcac 100644
+index ce743ce..a5396a3 100644
 --- a/po/lt/org.kde.plasmasetup.po
 +++ b/po/lt/org.kde.plasmasetup.po
 @@ -674,3 +674,35 @@ msgstr ""
@@ -1304,7 +1307,7 @@ index ce00599..d7ffcac 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/lv/org.kde.plasmasetup.po b/po/lv/org.kde.plasmasetup.po
-index 8149c65..417d9bb 100644
+index 81d312b..7fb70eb 100644
 --- a/po/lv/org.kde.plasmasetup.po
 +++ b/po/lv/org.kde.plasmasetup.po
 @@ -751,3 +751,35 @@ msgstr ""
@@ -1344,7 +1347,7 @@ index 8149c65..417d9bb 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/nb/org.kde.plasmasetup.po b/po/nb/org.kde.plasmasetup.po
-index b006483..9dc4652 100644
+index b8fd72f..5e219df 100644
 --- a/po/nb/org.kde.plasmasetup.po
 +++ b/po/nb/org.kde.plasmasetup.po
 @@ -663,3 +663,35 @@ msgstr ""
@@ -1384,7 +1387,7 @@ index b006483..9dc4652 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/nl/org.kde.plasmasetup.po b/po/nl/org.kde.plasmasetup.po
-index 8b6097c..fb4ac97 100644
+index 29b376f..8687be5 100644
 --- a/po/nl/org.kde.plasmasetup.po
 +++ b/po/nl/org.kde.plasmasetup.po
 @@ -818,3 +818,35 @@ msgstr ""
@@ -1424,7 +1427,7 @@ index 8b6097c..fb4ac97 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/nn/org.kde.plasmasetup.po b/po/nn/org.kde.plasmasetup.po
-index 1ea2779..0a7783c 100644
+index 82c7325..dda1465 100644
 --- a/po/nn/org.kde.plasmasetup.po
 +++ b/po/nn/org.kde.plasmasetup.po
 @@ -662,3 +662,35 @@ msgstr ""
@@ -1464,7 +1467,7 @@ index 1ea2779..0a7783c 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/pl/org.kde.plasmasetup.po b/po/pl/org.kde.plasmasetup.po
-index f97e526..1e7848d 100644
+index f4bbb6d..a3d7f9b 100644
 --- a/po/pl/org.kde.plasmasetup.po
 +++ b/po/pl/org.kde.plasmasetup.po
 @@ -797,3 +797,35 @@ msgstr ""
@@ -1504,7 +1507,7 @@ index f97e526..1e7848d 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/pt_BR/org.kde.plasmasetup.po b/po/pt_BR/org.kde.plasmasetup.po
-index 27a744b..fcd9333 100644
+index 2e77c9a..b566c74 100644
 --- a/po/pt_BR/org.kde.plasmasetup.po
 +++ b/po/pt_BR/org.kde.plasmasetup.po
 @@ -742,3 +742,35 @@ msgstr ""
@@ -1544,7 +1547,7 @@ index 27a744b..fcd9333 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ro/org.kde.plasmasetup.po b/po/ro/org.kde.plasmasetup.po
-index 003ab97..ff03544 100644
+index 334ac40..f7c0e18 100644
 --- a/po/ro/org.kde.plasmasetup.po
 +++ b/po/ro/org.kde.plasmasetup.po
 @@ -668,3 +668,35 @@ msgstr ""
@@ -1584,10 +1587,10 @@ index 003ab97..ff03544 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ru/org.kde.plasmasetup.po b/po/ru/org.kde.plasmasetup.po
-index e940571..37c30e8 100644
+index 917cd2b..1403841 100644
 --- a/po/ru/org.kde.plasmasetup.po
 +++ b/po/ru/org.kde.plasmasetup.po
-@@ -723,3 +723,35 @@ msgstr ""
+@@ -724,3 +724,35 @@ msgstr ""
  msgctxt "@action:button"
  msgid "Choose Another Option"
  msgstr ""
@@ -1624,7 +1627,7 @@ index e940571..37c30e8 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/sk/org.kde.plasmasetup.po b/po/sk/org.kde.plasmasetup.po
-index c095cd1..b4cf672 100644
+index f621fd5..c4f66ef 100644
 --- a/po/sk/org.kde.plasmasetup.po
 +++ b/po/sk/org.kde.plasmasetup.po
 @@ -680,3 +680,35 @@ msgstr ""
@@ -1664,7 +1667,7 @@ index c095cd1..b4cf672 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/sl/org.kde.plasmasetup.po b/po/sl/org.kde.plasmasetup.po
-index c90e4ec..09e71d9 100644
+index 3a24bdc..c65793e 100644
 --- a/po/sl/org.kde.plasmasetup.po
 +++ b/po/sl/org.kde.plasmasetup.po
 @@ -755,3 +755,35 @@ msgstr ""
@@ -1704,7 +1707,7 @@ index c90e4ec..09e71d9 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/sv/org.kde.plasmasetup.po b/po/sv/org.kde.plasmasetup.po
-index a5ad0a5..1b469fc 100644
+index 224cbb0..e7c9261 100644
 --- a/po/sv/org.kde.plasmasetup.po
 +++ b/po/sv/org.kde.plasmasetup.po
 @@ -811,3 +811,35 @@ msgstr ""
@@ -1744,7 +1747,7 @@ index a5ad0a5..1b469fc 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/tr/org.kde.plasmasetup.po b/po/tr/org.kde.plasmasetup.po
-index 0da900f..490164d 100644
+index 53be99a..d9d6a35 100644
 --- a/po/tr/org.kde.plasmasetup.po
 +++ b/po/tr/org.kde.plasmasetup.po
 @@ -817,3 +817,35 @@ msgstr ""
@@ -1784,7 +1787,7 @@ index 0da900f..490164d 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/uk/org.kde.plasmasetup.po b/po/uk/org.kde.plasmasetup.po
-index 47f9559..9ea4f66 100644
+index 6ad6a4a..2388072 100644
 --- a/po/uk/org.kde.plasmasetup.po
 +++ b/po/uk/org.kde.plasmasetup.po
 @@ -823,3 +823,35 @@ msgstr ""
@@ -1824,7 +1827,7 @@ index 47f9559..9ea4f66 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/zh_CN/org.kde.plasmasetup.po b/po/zh_CN/org.kde.plasmasetup.po
-index bce83c8..f09da63 100644
+index ad5baca..dc5ea71 100644
 --- a/po/zh_CN/org.kde.plasmasetup.po
 +++ b/po/zh_CN/org.kde.plasmasetup.po
 @@ -653,3 +653,35 @@ msgstr ""
@@ -1864,7 +1867,7 @@ index bce83c8..f09da63 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/zh_TW/org.kde.plasmasetup.po b/po/zh_TW/org.kde.plasmasetup.po
-index 37d2a40..b6b168b 100644
+index 017a9a5..97e764b 100644
 --- a/po/zh_TW/org.kde.plasmasetup.po
 +++ b/po/zh_TW/org.kde.plasmasetup.po
 @@ -800,3 +800,35 @@ msgstr ""

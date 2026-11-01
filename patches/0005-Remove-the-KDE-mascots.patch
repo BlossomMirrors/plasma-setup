@@ -17,10 +17,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  delete mode 100644 modules/finished/contents/ui/konqi-calling.png.license
 
 diff --git a/files/plasma-setup.desktop.in b/files/plasma-setup.desktop.in
-index f4b9085..caa906e 100644
+index c14b61e..176d20c 100644
 --- a/files/plasma-setup.desktop.in
 +++ b/files/plasma-setup.desktop.in
-@@ -71,5 +71,5 @@ Comment[tr]=KDE için ilk sistem ayarlarını yapın
+@@ -83,5 +83,5 @@ Comment[tr]=KDE için ilk sistem ayarlarını yapın
  Comment[uk]=Виконати початкове налаштовування системи для KDE
  Comment[zh_CN]=运行 KDE 的初始系统设置
  Comment[zh_TW]=為 KDE 進行初始系統設定

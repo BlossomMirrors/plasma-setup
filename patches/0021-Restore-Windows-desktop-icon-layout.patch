@@ -1,0 +1,321 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@localhost>
+Date: Sun, 1 Nov 2026 03:04:43 +0100
+Subject: [PATCH 21/21] Restore Windows desktop icon layout after Switch
+ migration
+
+Read the optional desktopLayout manifest field, remap shortcuts to their actual restored names, and apply column flow and manual grid positions after PWA launchers exist. Keep icons movable and retry when plasmashell is unavailable. Plasma always snaps icons to grid cells; pixel-level free placement is approximated.
+
+Validation: Node layout tests, Qt QJSEngine evaluation, auth helper compilation, and existing preferences tests.
+---
+ src/auth/CMakeLists.txt     |  2 ++
+ src/auth/authhelper.cpp     | 68 ++++++++++++++++++++++++++++-------
+ src/auth/switchdesktop.js   | 70 +++++++++++++++++++++++++++++++++++++
+ tests/test_switchdesktop.js | 47 +++++++++++++++++++++++++
+ 4 files changed, 174 insertions(+), 13 deletions(-)
+ create mode 100644 src/auth/switchdesktop.js
+ create mode 100644 tests/test_switchdesktop.js
+
+diff --git a/src/auth/CMakeLists.txt b/src/auth/CMakeLists.txt
+index a74faac..51410e9 100644
+--- a/src/auth/CMakeLists.txt
++++ b/src/auth/CMakeLists.txt
+@@ -28,3 +28,5 @@ install(TARGETS plasma-setup-auth-helper DESTINATION ${KAUTH_HELPER_INSTALL_DIR}
+ kauth_install_helper_files(plasma-setup-auth-helper org.kde.plasmasetup root)
+ 
+ install(FILES switchpreferences.py DESTINATION ${KDE_INSTALL_DATADIR}/plasma-setup)
++
++install(FILES switchdesktop.js DESTINATION ${KDE_INSTALL_DATADIR}/plasma-setup)
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index 7fac293..c64e22b 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -21,6 +21,7 @@
+ #include <QJsonArray>
+ #include <QJsonDocument>
+ #include <QJsonObject>
++#include <QMap>
+ #include <QProcess>
+ #include <QRegularExpression>
+ #include <QScopeGuard>
+@@ -1351,6 +1352,8 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+     const QStringList taskbar = launchers(manifest.value(QStringLiteral("taskbar")).toArray());
+     const QStringList start = launchers(manifest.value(QStringLiteral("start")).toArray());
+     QList<std::pair<QString, QString>> laterLinks;
++    QMap<QString, QString> desktopNames;
++    QJsonObject desktopLayout = manifest.value(QStringLiteral("desktopLayout")).toObject();
+ 
+     try {
+         PrivilegeGuard guard(userInfo);
+@@ -1367,18 +1370,21 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             if (type == QLatin1String("app")) {
+                 const QString id = item.contains(QStringLiteral("app")) ? item.value(QStringLiteral("app")).toString()
+                                                                        : item.value(QStringLiteral("flatpak")).toString();
++                QString link = desktop + QLatin1Char('/') + name + QStringLiteral(".desktop");
++                if (QFileInfo::exists(link) || QFileInfo(link).isSymLink()) {
++                    link = switchUniquePath(desktop, name + QStringLiteral(".desktop"));
++                }
+                 const QString desktopFile = switchDesktopFile(id, homePath);
+                 if (desktopFile.isEmpty()) {
+                     if (knownPwa(id)) {
+-                        laterLinks << std::pair{id, name};
++                        laterLinks << std::pair{id, QFileInfo(link).completeBaseName()};
++                        desktopNames.insert(item.value(QStringLiteral("name")).toString() + QStringLiteral(".desktop"), QFileInfo(link).fileName());
+                     }
+                     continue;
+                 }
+-                QString link = desktop + QLatin1Char('/') + name + QStringLiteral(".desktop");
+-                if (QFileInfo::exists(link) || QFileInfo(link).isSymLink()) {
+-                    link = switchUniquePath(desktop, name + QStringLiteral(".desktop"));
++                if (QFile::link(desktopFile, link)) {
++                    desktopNames.insert(item.value(QStringLiteral("name")).toString() + QStringLiteral(".desktop"), QFileInfo(link).fileName());
+                 }
+-                QFile::link(desktopFile, link);
+             } else if (type == QLatin1String("link")) {
+                 const QString target = item.value(QStringLiteral("target")).toString();
+                 if (!switchSafePath(target)) {
+@@ -1410,12 +1416,34 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+                     group.writeEntry("Icon", QStringLiteral("folder"));
+                     group.writeEntry("URL", QUrl::fromLocalFile(resolved).toString());
+                     entry.sync();
+-                } else if (QFileInfo(resolved).isFile()) {
+-                    QFile::link(resolved, link);
++                    desktopNames.insert(item.value(QStringLiteral("name")).toString(), QFileInfo(link).fileName());
++                } else if (QFileInfo(resolved).isFile() && QFile::link(resolved, link)) {
++                    desktopNames.insert(item.value(QStringLiteral("name")).toString(), QFileInfo(link).fileName());
+                 }
+             }
+         }
+ 
++        // Match positions to the actual names chosen above, including directory links
++        // and collision suffixes. Never let a manifest path escape the desktop.
++        if (!desktopLayout.isEmpty()) {
++            QJsonArray positions;
++            for (const auto &value : desktopLayout.value(QStringLiteral("items")).toArray()) {
++                QJsonObject item = value.toObject();
++                QString path = item.value(QStringLiteral("path")).toString();
++                if (!switchSafePath(path) || path.contains(QLatin1Char('/'))) {
++                    continue;
++                }
++                if (desktopNames.contains(path)) {
++                    path = desktopNames.value(path);
++                } else if (!QFileInfo::exists(desktop + QLatin1Char('/') + path)) {
++                    continue;
++                }
++                item.insert(QStringLiteral("path"), path);
++                positions.append(item);
++            }
++            desktopLayout.insert(QStringLiteral("items"), positions);
++        }
++
+         const QJsonObject preferences = manifest.value(QStringLiteral("preferences")).toObject();
+         if (!preferences.isEmpty()) {
+             const QString configDir = homePath + QStringLiteral("/.config");
+@@ -1437,7 +1465,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             entry.sync();
+         }
+ 
+-        if (!wallpaper.isEmpty() || !lockscreen.isEmpty() || !taskbar.isEmpty() || !start.isEmpty() || !pwas.isEmpty()) {
++        if (!wallpaper.isEmpty() || !lockscreen.isEmpty() || !taskbar.isEmpty() || !start.isEmpty() || !pwas.isEmpty() || !desktopLayout.isEmpty()) {
+             const QString scriptDir = homePath + QStringLiteral("/.local/share/blossomos-switch");
+             const QString autostartDir = homePath + QStringLiteral("/.config/autostart");
+             if (!QDir().mkpath(scriptDir) || !QDir().mkpath(autostartDir)) {
+@@ -1445,8 +1473,19 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             }
+ 
+             QFile layout(scriptDir + QStringLiteral("/layout.js"));
+-            if (layout.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
++            if (!layout.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
++                return makeErrorReply(QStringLiteral("Unable to write ") + layout.fileName());
++            }
++            {
+                 QTextStream stream(&layout);
++                if (!desktopLayout.isEmpty()) {
++                    QFile desktopScript(QStringLiteral("/usr/share/plasma-setup/switchdesktop.js"));
++                    if (!desktopScript.open(QIODevice::ReadOnly)) {
++                        return makeErrorReply(QStringLiteral("Unable to read the desktop layout script"));
++                    }
++                    stream << QString::fromUtf8(desktopScript.readAll()) << "\nswitchApplyDesktopLayout("
++                           << QString::fromUtf8(QJsonDocument(desktopLayout).toJson(QJsonDocument::Compact)) << ");\n";
++                }
+                 stream << "panels().forEach(function (panel) {\n";
+                 stream << "    panel.widgets().forEach(function (widget) {\n";
+                 stream << "        if (launchers.length > 0 && (widget.type === \"org.kde.plasma.icontasks\" || widget.type === "
+@@ -1461,6 +1500,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+                 stream << "        }\n";
+                 stream << "    });\n";
+                 stream << "});\n";
++                stream.flush();
+                 layout.close();
+             }
+ 
+@@ -1500,7 +1540,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             stream << "    esac\n";
+             stream << "    printf '\"applications:%s.desktop\",' \"$1\"\n";
+             stream << "}\n";
+-            stream << "wait_for org.kde.plasmashell\n";
++            stream << "wait_for org.kde.plasmashell || exit 0\n";
+             stream << "sleep 3\n";
+             stream << "if [ ! -e \"$dir/visuals\" ]; then\n";
+             if (!wallpaper.isEmpty()) {
+@@ -1540,7 +1580,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+                     stream << "link " << switchShellQuote(id) << " " << switchShellQuote(name) << "\n";
+                 }
+             }
+-            if (!taskbar.isEmpty() || !start.isEmpty()) {
++            if (!taskbar.isEmpty() || !start.isEmpty() || !desktopLayout.isEmpty()) {
+                 stream << "launchers=\"\"\n";
+                 if (!taskbar.isEmpty()) {
+                     stream << "set -- " << quoteAll(taskbar) << "\n";
+@@ -1556,11 +1596,12 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+                     stream << "done\n";
+                 }
+                 stream << "layout=\"var launchers = [${launchers%,}]; var favorites = [${favorites%,}]; $(cat \"$dir/layout.js\")\"\n";
+-                stream << "dbus-send --session --dest=org.kde.plasmashell --type=method_call /PlasmaShell org.kde.PlasmaShell.evaluateScript "
+-                          "\"string:$layout\"\n";
++                stream << "dbus-send --session --print-reply --dest=org.kde.plasmashell --type=method_call /PlasmaShell org.kde.PlasmaShell.evaluateScript "
++                          "\"string:$layout\" >/dev/null || exit 0\n";
+             }
+             stream << "rm -f \"$HOME/.config/autostart/blossomos-switch.desktop\"\n";
+             stream << "rm -rf \"$dir\"\n";
++            stream.flush();
+             script.close();
+ 
+             QFile entry(autostartDir + QStringLiteral("/blossomos-switch.desktop"));
+@@ -1575,6 +1616,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             entryStream << "OnlyShowIn=KDE;\n";
+             entryStream << "X-KDE-StartupNotify=false\n";
+             entryStream << "NoDisplay=true\n";
++            entryStream.flush();
+             entry.close();
+         }
+     } catch (const std::runtime_error &e) {
+diff --git a/src/auth/switchdesktop.js b/src/auth/switchdesktop.js
+new file mode 100644
+index 0000000..57b96b4
+--- /dev/null
++++ b/src/auth/switchdesktop.js
+@@ -0,0 +1,70 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++// Evaluated by plasmashell after the restored desktop links (including PWAs) exist.
++function switchDesktopPositions(layout, geometry) {
++    function integer(value, low, high) {
++        return typeof value === "number" && isFinite(value) && Math.floor(value) === value && value >= low && value <= high;
++    }
++    var sx = integer(layout.spacingX, 1, 4096) ? layout.spacingX : 100;
++    var sy = integer(layout.spacingY, 1, 4096) ? layout.spacingY : 100;
++    var rows = Math.max(1, Math.floor(geometry.height / sy));
++    var columns = Math.max(1, Math.floor(geometry.width / sx));
++    var items = (Array.isArray(layout.items) ? layout.items : []).filter(function (item) {
++        return item && typeof item.path === "string" && item.path.length > 0 && item.path !== "." && item.path !== ".."
++            && !/[\/\\\x00-\x1f]/.test(item.path)
++            && integer(item.x, -1000000, 1000000) && integer(item.y, -1000000, 1000000);
++    });
++    // Rehome icons from displays left of/above the main display; keep existing gaps.
++    var originX = 0, originY = 0;
++    items.forEach(function (item) { originX = Math.min(originX, item.x); originY = Math.min(originY, item.y); });
++    items.sort(function (a, b) { return a.x - b.x || a.y - b.y; });
++    var used = {}, names = {}, positions = [];
++    items.forEach(function (item) {
++        // FolderModel uses desktop:/ URLs, with QUrl's pretty-decoded file names.
++        var url = "desktop:/" + item.path.replace(/%/g, "%25").replace(/#/g, "%23").replace(/\?/g, "%3F");
++        if (names[url]) return;
++        names[url] = true;
++        var column = Math.max(0, Math.round((item.x - originX) / sx));
++        var row = Math.max(0, Math.round((item.y - originY) / sy));
++        var index = Math.min(columns - 1, column) * rows + Math.min(rows - 1, row);
++        while (used[index]) index++;
++        used[index] = true;
++        positions.push(url, String(Math.floor(index / rows)), String(index % rows));
++        columns = Math.max(columns, Math.floor(index / rows) + 1);
++    });
++    return [String(columns), String(rows)].concat(positions);
++}
++
++function switchApplyDesktopLayout(layout) {
++    if (!layout || layout.flow !== "columns" || typeof layout.autoArrange !== "boolean") return;
++    var applied = false;
++    desktops().forEach(function (desktop) {
++        // Apply positions once, rather than duplicating every icon across monitors/activities.
++        if (desktop.type !== "org.kde.plasma.folder" || desktop.screen < 0) return;
++        desktop.currentConfigGroup = ["General"];
++        if (desktop.readConfig("url", "desktop:/") !== "desktop:/") return;
++        desktop.writeConfig("arrangement", 1); // top to bottom, then the next column
++        desktop.writeConfig("alignment", 0);
++        desktop.writeConfig("locked", false); // auto-arrange does not mean immovable icons
++        if (layout.autoArrange) {
++            desktop.writeConfig("sortMode", 0); // FolderModel: name = 0, manual = -1
++            return;
++        }
++        if (applied) return;
++        var geometry = screenGeometry(desktop.screen);
++        if (geometry.width <= 0 || geometry.height <= 0) return;
++        var resolution = Math.floor(geometry.width) + "x" + Math.floor(geometry.height);
++        var positions = {};
++        positions[resolution] = switchDesktopPositions(layout, geometry);
++        // Disable the positioner while replacing its state, then reload it in manual mode.
++        desktop.writeConfig("sortMode", 0);
++        desktop.reloadConfig();
++        desktop.writeConfig("positions", JSON.stringify(positions));
++        desktop.writeConfig("lastResolution", resolution);
++        desktop.writeConfig("changedPositions", "{}");
++        desktop.writeConfig("sortMode", -1);
++        desktop.reloadConfig();
++        applied = true;
++    });
++    // Plasma always snaps Folder View icons to cells. alignToGrid=false cannot disable
++    // that; manual mode keeps the nearest available cell and allows subsequent dragging.
++}
+diff --git a/tests/test_switchdesktop.js b/tests/test_switchdesktop.js
+new file mode 100644
+index 0000000..db131da
+--- /dev/null
++++ b/tests/test_switchdesktop.js
+@@ -0,0 +1,47 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const vm = require('node:vm');
++const path = require('node:path');
++const source = fs.readFileSync(path.join(__dirname, '../src/auth/switchdesktop.js'), 'utf8');
++function desktop(type = 'org.kde.plasma.folder', url = 'desktop:/', screen = 0) {
++    return {type, screen, config: {url}, reloads: 0,
++        readConfig(key, fallback) { return this.config[key] ?? fallback; },
++        writeConfig(key, value) { this.config[key] = value; },
++        reloadConfig() { this.reloads++; }};
++}
++function apply(layout, views = [desktop()]) {
++    const context = vm.createContext({desktops: () => views, screenGeometry: () => ({width: 1000, height: 600})});
++    vm.runInContext(source, context);
++    context.switchApplyDesktopLayout(layout);
++    return views;
++}
++const layout = {flow: 'columns', autoArrange: false, alignToGrid: false, spacingX: 100, spacingY: 100,
++    items: [{path: 'Firefox.desktop', x: 0, y: 0}, {path: 'Taxes.desktop', x: 0, y: 200},
++        {path: 'notes.txt', x: 100, y: 0}]};
++const [manual] = apply(layout);
++assert.equal(manual.config.arrangement, 1);
++assert.equal(manual.config.locked, false);
++assert.equal(manual.config.sortMode, -1);
++const positions = JSON.parse(manual.config.positions)['1000x600'];
++assert.deepEqual(positions.slice(2), ['desktop:/Firefox.desktop', '0', '0', 'desktop:/Taxes.desktop', '0', '2', 'desktop:/notes.txt', '1', '0']);
++assert.equal(manual.reloads, 2);
++const [automatic] = apply({...layout, autoArrange: true});
++assert.equal(automatic.config.sortMode, 0);
++assert.equal(automatic.config.positions, undefined);
++const [old] = apply(undefined);
++assert.deepEqual(old.config, {url: 'desktop:/'});
++const views = apply(layout, [desktop('org.kde.desktopcontainment'), desktop(undefined, 'file:///tmp'), desktop(), desktop()]);
++assert.equal(views[0].config.arrangement, undefined);
++assert.equal(views[1].config.arrangement, undefined);
++assert.equal(views[3].config.positions, undefined);
++const [collision] = apply({...layout, items: [{path: 'a', x: -100, y: -100}, {path: 'b', x: -100, y: -100},
++    {path: '../escape', x: 0, y: 0}, {path: 'bad', x: null, y: 0}, {path: 'bad2', x: Infinity, y: 0},
++    {path: 'a', x: 0, y: 0}, {path: '100% #?.txt', x: 0, y: 0}]});
++const safe = JSON.parse(collision.config.positions)['1000x600'];
++assert.equal(safe.length, 11);
++assert.equal(safe[2], 'desktop:/a');
++assert.equal(safe[5], 'desktop:/b');
++assert.notDeepEqual(safe.slice(3, 5), safe.slice(6, 8));
++assert.equal(safe[8], 'desktop:/100%25 %23%3F.txt');
++console.log('Desktop layout tests passed');
