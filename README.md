@@ -34,7 +34,7 @@ just                  # list everything
 - appends `.blossomos1` to the release
 - installs `wallpapers.json` (see below)
 
-It then installs build dependencies via `dnf builddep` and runs `rpmbuild`.
+On the host, it creates or reuses a Fedora toolbox for the requested version and runs the fetch and build there. In CI's Fedora container, it runs directly. It installs build dependencies via `dnf builddep` and runs `rpmbuild`.
 
 ### Preview
 

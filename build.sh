@@ -3,6 +3,7 @@ set -eou pipefail
 
 # ./build.sh [fedora_version]          build the patched RPM
 # ./build.sh --fetch [fedora_version]  only fetch the SRPM into cache/, print its path
+ORIGINAL_ARGS=("$@")
 FETCH_ONLY=0
 if [[ "${1:-}" == "--fetch" ]]; then
     FETCH_ONLY=1
@@ -14,6 +15,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 CACHE_DIR="${SCRIPT_DIR}/cache"
 RELEASE_SUFFIX="blossomos1"
+
+if [[ ! -e /run/.containerenv && ! -e /.dockerenv && -z "${CI:-}" ]]; then
+    TOOLBOX_NAME="plasma-setup-rpm-f${FEDORA_VERSION}"
+    if ! podman container exists "${TOOLBOX_NAME}"; then
+        toolbox create -y --distro fedora --release "${FEDORA_VERSION}" "${TOOLBOX_NAME}" >&2
+    fi
+
+    packages=(koji)
+    if [[ "${FETCH_ONLY}" == 0 ]]; then
+        packages+=(rpm-build dnf-plugins-core python3 findutils git)
+    fi
+    toolbox run -c "${TOOLBOX_NAME}" sudo dnf -q -y install "${packages[@]}" >&2
+    exec toolbox run -c "${TOOLBOX_NAME}" bash "${SCRIPT_DIR}/build.sh" "${ORIGINAL_ARGS[@]}"
+fi
 
 patch_file_list() {
     find "${SCRIPT_DIR}/patches" -name '*.patch' | sort
@@ -118,12 +133,9 @@ main() {
     patch_spec "${spec}"
 
     echo "==> Installing build dependencies..."
-    # CI runs as root in a plain Fedora container: no sudo, no rpm-ostree
+    # CI runs as root in a plain Fedora container; Toolbx runs as the host user.
     local sudo=()
     [[ "${EUID}" -ne 0 ]] && sudo=(sudo)
-    if [[ -e /run/ostree-booted ]]; then
-        "${sudo[@]}" rpm-ostree usroverlay || true
-    fi
     "${sudo[@]}" dnf builddep -y "${spec}"
 
     echo "==> Building plasma-setup RPMs..."
