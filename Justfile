@@ -1,4 +1,4 @@
-fedora := env("FEDORA_VERSION", "44")
+fedora := env("FEDORA_VERSION", "45")
 src_dir := "build/src"
 cmake_dir := "build/cmake"
 stage_dir := "build/stage"

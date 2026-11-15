@@ -4,11 +4,11 @@ stages:
 
 variables:
   PACKAGE_NAME: plasma-setup
-  FEDORA_VERSION: "44"
+  FEDORA_VERSION: "45"
 
 rpm:
   stage: build
-  image: registry.fedoraproject.org/fedora:44
+  image: registry.fedoraproject.org/fedora:45
   rules:
     - if: $CI_COMMIT_TAG
   cache:
@@ -22,7 +22,7 @@ rpm:
     - |
       set -eu
       # build.sh always builds the latest Koji SRPM, so make sure the tag
-      # still describes what was built (e.g. v6.7.5-1.fc44.blossomos1)
+      # still describes what was built (e.g. v6.7.5-1.fc45.blossomos1)
       BUILT=$(rpm -qp --qf '%{VERSION}-%{RELEASE}' build/rpmbuild/SRPMS/*.src.rpm)
       if [ "$BUILT" != "${CI_COMMIT_TAG#v}" ]; then
         echo "Tag $CI_COMMIT_TAG does not match built $BUILT, retag as v$BUILT" >&2
@@ -37,7 +37,7 @@ rpm:
 
 release:
   stage: release
-  image: registry.fedoraproject.org/fedora:44
+  image: registry.fedoraproject.org/fedora:45
   needs:
     - rpm
   rules:
