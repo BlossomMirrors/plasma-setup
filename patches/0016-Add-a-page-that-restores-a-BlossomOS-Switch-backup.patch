@@ -3103,7 +3103,7 @@ index 0000000..b3fe323
 +    GCancellable *m_cancellable = nullptr;
 +};
 diff --git a/po/ar/org.kde.plasmasetup.po b/po/ar/org.kde.plasmasetup.po
-index d8cb584..6118212 100644
+index 383706e..5dc041c 100644
 --- a/po/ar/org.kde.plasmasetup.po
 +++ b/po/ar/org.kde.plasmasetup.po
 @@ -379,6 +379,215 @@ msgctxt "@action:button"
@@ -3595,13 +3595,14 @@ index 03fb0a9..2ed84c6 100644
 +msgid "Choose Another Option"
 +msgstr ""
 diff --git a/po/ca/org.kde.plasmasetup.po b/po/ca/org.kde.plasmasetup.po
-index 8d5f850..eaef257 100644
+index 9313175..ce9a808 100644
 --- a/po/ca/org.kde.plasmasetup.po
 +++ b/po/ca/org.kde.plasmasetup.po
-@@ -384,6 +384,233 @@ msgctxt "@action:button"
+@@ -383,3 +383,230 @@ msgstr "Següent"
+ msgctxt "@action:button"
  msgid "Finish"
  msgstr "Finalitza"
- 
++
 +#: modules/switch/contents/ui/main.qml:130
 +#, kde-format
 +msgid "Your Files Are Here"
@@ -3828,10 +3829,6 @@ index 8d5f850..eaef257 100644
 +msgctxt "@action:button"
 +msgid "Log Out"
 +msgstr ""
-+
- #~ msgid "Adjust the size of elements on the screen."
- #~ msgstr "Ajusteu la mida dels elements a la pantalla."
- 
 diff --git a/po/ca@valencia/org.kde.plasmasetup.po b/po/ca@valencia/org.kde.plasmasetup.po
 index 58eec7a..612fe33 100644
 --- a/po/ca@valencia/org.kde.plasmasetup.po
@@ -5991,10 +5988,10 @@ index 3e3ee18..f76fe27 100644
 +msgid "Log Out"
 +msgstr ""
 diff --git a/po/gl/org.kde.plasmasetup.po b/po/gl/org.kde.plasmasetup.po
-index 63f0ab8..07a2b6f 100644
+index 324c690..45ce76c 100644
 --- a/po/gl/org.kde.plasmasetup.po
 +++ b/po/gl/org.kde.plasmasetup.po
-@@ -384,6 +384,207 @@ msgctxt "@action:button"
+@@ -379,6 +379,207 @@ msgctxt "@action:button"
  msgid "Finish"
  msgstr "Rematar"
  
@@ -6202,7 +6199,7 @@ index 63f0ab8..07a2b6f 100644
  #~ msgid "Adjust the size of elements on the screen."
  #~ msgstr "Axuste o tamaño dos elementos na pantalla."
  
-@@ -542,3 +743,29 @@ msgstr "Rematar"
+@@ -537,3 +738,29 @@ msgstr "Rematar"
  
  #~ msgid "Let's set up your user account"
  #~ msgstr "Configuremos a súa conta de persoa usuaria."

@@ -464,7 +464,7 @@ index b3fe323..ebcfadc 100644
      QString m_peer;
      QString m_source;
 diff --git a/po/ar/org.kde.plasmasetup.po b/po/ar/org.kde.plasmasetup.po
-index aecf2e4..e084626 100644
+index 96fd5aa..d8f98bd 100644
 --- a/po/ar/org.kde.plasmasetup.po
 +++ b/po/ar/org.kde.plasmasetup.po
 @@ -778,3 +778,35 @@ msgstr ""
@@ -544,13 +544,14 @@ index 36efdc0..15554c1 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/ca/org.kde.plasmasetup.po b/po/ca/org.kde.plasmasetup.po
-index 3fb5581..ba3fba3 100644
+index a88b15f..cfe99b5 100644
 --- a/po/ca/org.kde.plasmasetup.po
 +++ b/po/ca/org.kde.plasmasetup.po
-@@ -667,6 +667,38 @@ msgctxt "@action:button"
+@@ -666,3 +666,35 @@ msgstr ""
+ msgctxt "@action:button"
  msgid "Use Photo"
  msgstr ""
- 
++
 +#: modules/switch/contents/ui/main.qml
 +#, kde-format
 +msgctxt "%1 is a link"
@@ -582,10 +583,6 @@ index 3fb5581..ba3fba3 100644
 +msgctxt "@item where a backup is stored"
 +msgid "This computer"
 +msgstr ""
-+
- #~ msgid "Adjust the size of elements on the screen."
- #~ msgstr "Ajusteu la mida dels elements a la pantalla."
- 
 diff --git a/po/ca@valencia/org.kde.plasmasetup.po b/po/ca@valencia/org.kde.plasmasetup.po
 index 82bb165..129d7b8 100644
 --- a/po/ca@valencia/org.kde.plasmasetup.po
@@ -947,10 +944,10 @@ index 5b4cacf..5e3863e 100644
 +msgid "This computer"
 +msgstr ""
 diff --git a/po/gl/org.kde.plasmasetup.po b/po/gl/org.kde.plasmasetup.po
-index c8efdad..522d032 100644
+index fa01f59..ce11461 100644
 --- a/po/gl/org.kde.plasmasetup.po
 +++ b/po/gl/org.kde.plasmasetup.po
-@@ -825,3 +825,35 @@ msgstr ""
+@@ -820,3 +820,35 @@ msgstr ""
  msgctxt "@action:button"
  msgid "Choose Another Option"
  msgstr ""

@@ -358,7 +358,7 @@ index c29e849..18da080 100644
  
                  // Padding around the text
 diff --git a/po/ar/org.kde.plasmasetup.po b/po/ar/org.kde.plasmasetup.po
-index 6118212..aecf2e4 100644
+index 5dc041c..96fd5aa 100644
 --- a/po/ar/org.kde.plasmasetup.po
 +++ b/po/ar/org.kde.plasmasetup.po
 @@ -588,6 +588,62 @@ msgctxt "@action:button"
@@ -492,13 +492,14 @@ index 2ed84c6..36efdc0 100644
  #~ msgstr "Ekrandakı elementlərin ölçüsünü tənzimləyin."
  
 diff --git a/po/ca/org.kde.plasmasetup.po b/po/ca/org.kde.plasmasetup.po
-index eaef257..3fb5581 100644
+index ce9a808..a88b15f 100644
 --- a/po/ca/org.kde.plasmasetup.po
 +++ b/po/ca/org.kde.plasmasetup.po
-@@ -611,6 +611,62 @@ msgctxt "@action:button"
+@@ -610,3 +610,59 @@ msgstr ""
+ msgctxt "@action:button"
  msgid "Log Out"
  msgstr ""
- 
++
 +#: modules/account/contents/ui/main.qml:94
 +#, kde-format
 +msgctxt "@action:button"
@@ -554,10 +555,6 @@ index eaef257..3fb5581 100644
 +msgctxt "@action:button"
 +msgid "Use Photo"
 +msgstr ""
-+
- #~ msgid "Adjust the size of elements on the screen."
- #~ msgstr "Ajusteu la mida dels elements a la pantalla."
- 
 diff --git a/po/ca@valencia/org.kde.plasmasetup.po b/po/ca@valencia/org.kde.plasmasetup.po
 index 612fe33..82bb165 100644
 --- a/po/ca@valencia/org.kde.plasmasetup.po
@@ -1150,10 +1147,10 @@ index f76fe27..5b4cacf 100644
 +msgid "Use Photo"
 +msgstr ""
 diff --git a/po/gl/org.kde.plasmasetup.po b/po/gl/org.kde.plasmasetup.po
-index 07a2b6f..c8efdad 100644
+index 45ce76c..fa01f59 100644
 --- a/po/gl/org.kde.plasmasetup.po
 +++ b/po/gl/org.kde.plasmasetup.po
-@@ -585,6 +585,62 @@ msgctxt "@action:button"
+@@ -580,6 +580,62 @@ msgctxt "@action:button"
  msgid "Log Out"
  msgstr ""
  
