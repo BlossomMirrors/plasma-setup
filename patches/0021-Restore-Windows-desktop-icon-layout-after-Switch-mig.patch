@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Codex <codex@localhost>
 Date: Sun, 1 Nov 2026 03:04:43 +0100
-Subject: [PATCH 21/21] Restore Windows desktop icon layout after Switch
+Subject: [PATCH 21/22] Restore Windows desktop icon layout after Switch
  migration
 
 Read the optional desktopLayout manifest field, remap shortcuts to their actual restored names, and apply column flow and manual grid positions after PWA launchers exist. Keep icons movable and retry when plasmashell is unavailable. Plasma always snaps icons to grid cells; pixel-level free placement is approximated.

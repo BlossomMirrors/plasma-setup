@@ -1,0 +1,895 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Fri, 13 Nov 2026 16:44:37 +0100
+Subject: [PATCH 22/22] Create the other Windows accounts from a Switch backup
+
+---
+ modules/switch/contents/ui/main.qml    |  12 +
+ modules/switchutil/backupextractor.cpp |  18 +-
+ modules/switchutil/switchutil.cpp      |  19 ++
+ modules/switchutil/switchutil.h        |   2 +
+ po/de/org.kde.plasmasetup.po           |  12 +
+ src/auth/CMakeLists.txt                |   1 +
+ src/auth/authhelper.cpp                | 430 +++++++++++++++++++------
+ src/auth/authhelper.h                  |   9 +
+ src/auth/switchpassword.py             |  94 ++++++
+ src/initialstartutil.cpp               |   4 +
+ 10 files changed, 499 insertions(+), 102 deletions(-)
+ create mode 100644 src/auth/switchpassword.py
+
+diff --git a/modules/switch/contents/ui/main.qml b/modules/switch/contents/ui/main.qml
+index 8b61424..47ebb7f 100644
+--- a/modules/switch/contents/ui/main.qml
++++ b/modules/switch/contents/ui/main.qml
+@@ -355,6 +355,18 @@ PlasmaSetupComponents.SetupModule {
+                         steps: Switch.SwitchUtil.steps
+                     }
+ 
++                    Label {
++                        Layout.fillWidth: true
++                        horizontalAlignment: Text.AlignHCenter
++                        wrapMode: Text.Wrap
++                        visible: root.done && Switch.SwitchUtil.otherUsers.length > 0
++                        color: Kirigami.Theme.neutralTextColor
++                        text: i18np("An account for %2 is created as well. They choose a password when they first log in.",
++                                    "Accounts for %2 are created as well. They choose a password when they first log in.",
++                                    Switch.SwitchUtil.otherUsers.length,
++                                    Switch.SwitchUtil.otherUsers.join(", "))
++                    }
++
+                     Label {
+                         Layout.fillWidth: true
+                         horizontalAlignment: Text.AlignHCenter
+diff --git a/modules/switchutil/backupextractor.cpp b/modules/switchutil/backupextractor.cpp
+index 7a7971e..b32b356 100644
+--- a/modules/switchutil/backupextractor.cpp
++++ b/modules/switchutil/backupextractor.cpp
+@@ -7,6 +7,7 @@
+ #include <QDir>
+ #include <QFile>
+ #include <QJsonDocument>
++#include <QRegularExpression>
+ 
+ #include <archive.h>
+ #include <archive_entry.h>
+@@ -48,12 +49,23 @@ la_ssize_t readCallback(struct archive *archive, void *data, const void **buffer
+     return count;
+ }
+ 
++QString userRelative(const QString &path)
++{
++    static const QRegularExpression user(u"^users/[1-9][0-9]{0,3}(/|$)"_s);
++    const QRegularExpressionMatch match = user.match(path);
++    return match.hasMatch() ? path.mid(match.capturedEnd()) : path;
++}
++
+ bool allowedTop(const QString &path)
+ {
+-    if (path == "manifest.json"_L1) {
++    if (path == "manifest.json"_L1 || path == "users"_L1) {
++        return true;
++    }
++    const QString relative = userRelative(path);
++    if (relative.isEmpty() && relative != path) {
+         return true;
+     }
+-    const QString top = path.section(QLatin1Char('/'), 0, 0);
++    const QString top = relative.section(QLatin1Char('/'), 0, 0);
+     return top == "wallpaper"_L1 || top == "lockscreen"_L1 || top == "profile"_L1 || top == "ssh"_L1 || top == "browser"_L1 || top == "home"_L1;
+ }
+ }
+@@ -157,7 +169,7 @@ BackupExtractor::Result BackupExtractor::extract(AgeDecryptor &decryptor, const
+ 
+         const QByteArray fullPath = QFile::encodeName(target + QLatin1Char('/') + path);
+         archive_entry_copy_pathname(entry, fullPath.constData());
+-        if (path.section(QLatin1Char('/'), 0, 0) == "ssh"_L1) {
++        if (userRelative(path).section(QLatin1Char('/'), 0, 0) == "ssh"_L1) {
+             archive_entry_set_perm(entry, type == AE_IFDIR ? 0700 : 0600);
+         } else {
+             archive_entry_set_perm(entry, type == AE_IFDIR ? 0755 : (archive_entry_perm(entry) & 0755) | 0600);
+diff --git a/modules/switchutil/switchutil.cpp b/modules/switchutil/switchutil.cpp
+index 32715c3..bfa43c5 100644
+--- a/modules/switchutil/switchutil.cpp
++++ b/modules/switchutil/switchutil.cpp
+@@ -339,6 +339,25 @@ int SwitchUtil::pwaCount() const
+     return m_state == Done ? m_manifest.value("pwas"_L1).toArray().size() : 0;
+ }
+ 
++QStringList SwitchUtil::otherUsers() const
++{
++    QStringList names;
++    if (m_state != Done) {
++        return names;
++    }
++    for (const QJsonValue &value : m_manifest.value("users"_L1).toArray()) {
++        const QJsonObject user = value.toObject();
++        QString name = user.value("profile"_L1).toObject().value("name"_L1).toString().simplified();
++        if (name.isEmpty()) {
++            name = user.value("user"_L1).toString().simplified();
++        }
++        if (!name.isEmpty()) {
++            names << name.left(64);
++        }
++    }
++    return names;
++}
++
+ QString SwitchUtil::profileName() const
+ {
+     return m_state == Done ? m_manifest.value("profile"_L1).toObject().value("name"_L1).toString().simplified().left(128) : QString();
+diff --git a/modules/switchutil/switchutil.h b/modules/switchutil/switchutil.h
+index ebcfadc..700099b 100644
+--- a/modules/switchutil/switchutil.h
++++ b/modules/switchutil/switchutil.h
+@@ -53,6 +53,7 @@ class SwitchUtil : public QObject
+     Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged)
+     Q_PROPERTY(QVariantList steps READ steps NOTIFY stepsChanged)
+     Q_PROPERTY(int pwaCount READ pwaCount NOTIFY stateChanged)
++    Q_PROPERTY(QStringList otherUsers READ otherUsers NOTIFY stateChanged)
+ 
+ public:
+     enum Mode {
+@@ -104,6 +105,7 @@ public:
+     void setUseWallpaper(bool use);
+     QVariantList steps() const;
+     int pwaCount() const;
++    QStringList otherUsers() const;
+ 
+     Q_INVOKABLE void refreshBackups();
+     Q_INVOKABLE void restore(const QString &path, const QString &pin);
+diff --git a/po/de/org.kde.plasmasetup.po b/po/de/org.kde.plasmasetup.po
+index 8e063fd..8c6f623 100644
+--- a/po/de/org.kde.plasmasetup.po
++++ b/po/de/org.kde.plasmasetup.po
+@@ -752,6 +752,18 @@ msgid_plural "%1 web apps install when you first log in."
+ msgstr[0] "Eine Web App wird bei deiner ersten Anmeldung installiert."
+ msgstr[1] "%1 Web Apps werden bei deiner ersten Anmeldung installiert."
+ 
++#: modules/switch/contents/ui/main.qml:362
++#, kde-format
++msgid "An account for %2 is created as well. They choose a password when they first log in."
++msgid_plural "Accounts for %2 are created as well. They choose a password when they first log in."
++msgstr[0] "Ein Konto für %2 wird ebenfalls angelegt. Das Passwort wird bei der ersten Anmeldung gewählt."
++msgstr[1] "Konten für %2 werden ebenfalls angelegt. Die Passwörter werden bei der ersten Anmeldung gewählt."
++
++#: src/initialstartutil.cpp:194
++#, kde-format
++msgid "No account was created for: %1"
++msgstr "Kein Konto angelegt für: %1"
++
+ #: src/components/qml/StepList.qml:81
+ #, kde-format
+ msgctxt "@info:progress percent"
+diff --git a/src/auth/CMakeLists.txt b/src/auth/CMakeLists.txt
+index 51410e9..a7b4a4a 100644
+--- a/src/auth/CMakeLists.txt
++++ b/src/auth/CMakeLists.txt
+@@ -28,5 +28,6 @@ install(TARGETS plasma-setup-auth-helper DESTINATION ${KAUTH_HELPER_INSTALL_DIR}
+ kauth_install_helper_files(plasma-setup-auth-helper org.kde.plasmasetup root)
+ 
+ install(FILES switchpreferences.py DESTINATION ${KDE_INSTALL_DATADIR}/plasma-setup)
++install(FILES switchpassword.py DESTINATION ${KDE_INSTALL_DATADIR}/plasma-setup)
+ 
+ install(FILES switchdesktop.js DESTINATION ${KDE_INSTALL_DATADIR}/plasma-setup)
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index c64e22b..6867415 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -1110,42 +1110,138 @@ ActionReply PlasmaSetupAuthHelper::switchfirewall(const QVariantMap &args)
+     return ActionReply::SuccessReply();
+ }
+ 
+-ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
++struct SwitchUser {
++    UserInfo info;
++    QString homePath;
++    QJsonObject data;
++    QString prefix;
++    bool primary = false;
++    QMap<QString, QString> xdg;
++    QMap<QString, QString> restored;
++    QString wallpaper;
++    QString lockscreen;
++    QStringList browserIds;
++};
++
++static const QMap<QString, QString> &switchKinds()
+ {
+-    if (!args.contains(QStringLiteral("username")) || !args[QStringLiteral("username")].canConvert<QString>()) {
+-        return makeErrorReply(QStringLiteral("Username argument is missing or invalid."));
++    static const QMap<QString, QString> kinds = {
++        {QStringLiteral("desktop"), QStringLiteral("DESKTOP")},
++        {QStringLiteral("documents"), QStringLiteral("DOCUMENTS")},
++        {QStringLiteral("downloads"), QStringLiteral("DOWNLOAD")},
++        {QStringLiteral("music"), QStringLiteral("MUSIC")},
++        {QStringLiteral("pictures"), QStringLiteral("PICTURES")},
++        {QStringLiteral("videos"), QStringLiteral("VIDEOS")},
++    };
++    return kinds;
++}
++
++static QString switchKindDir(const SwitchUser &user, const QString &kind)
++{
++    const QString dir = user.xdg.value(switchKinds().value(kind));
++    if (!dir.isEmpty() && dir != user.homePath && dir.startsWith(user.homePath + QLatin1Char('/'))) {
++        return dir;
++    }
++    static const QMap<QString, QString> fallback = {
++        {QStringLiteral("desktop"), QStringLiteral("Desktop")},
++        {QStringLiteral("documents"), QStringLiteral("Documents")},
++        {QStringLiteral("downloads"), QStringLiteral("Downloads")},
++        {QStringLiteral("music"), QStringLiteral("Music")},
++        {QStringLiteral("pictures"), QStringLiteral("Pictures")},
++        {QStringLiteral("videos"), QStringLiteral("Videos")},
++    };
++    return user.homePath + QLatin1Char('/') + fallback.value(kind);
++}
++
++static QString switchUserName(const QJsonObject &data)
++{
++    const QString source = data.value(QStringLiteral("user")).toString().normalized(QString::NormalizationForm_KD).toLower();
++    QString name;
++    for (const QChar c : source) {
++        if ((c >= QLatin1Char('a') && c <= QLatin1Char('z')) || (c >= QLatin1Char('0') && c <= QLatin1Char('9')) || c == QLatin1Char('_')
++            || c == QLatin1Char('-')) {
++            name += c;
++        }
+     }
+-    const QString username = args[QStringLiteral("username")].toString();
++    while (!name.isEmpty() && !(name.at(0) >= QLatin1Char('a') && name.at(0) <= QLatin1Char('z')) && name.at(0) != QLatin1Char('_')) {
++        name.remove(0, 1);
++    }
++    name = name.left(24);
++    return name.isEmpty() ? QStringLiteral("user") : name;
++}
+ 
+-    UserInfo userInfo;
+-    try {
+-        userInfo = getUserInfo(username);
+-    } catch (const std::runtime_error &e) {
+-        return makeErrorReply(QStringLiteral("Failed to get user info: ") + QString::fromStdString(e.what()));
++static QString switchFullName(const QJsonObject &data)
++{
++    QString name = data.value(QStringLiteral("profile")).toObject().value(QStringLiteral("name")).toString();
++    if (name.trimmed().isEmpty()) {
++        name = data.value(QStringLiteral("user")).toString();
+     }
+-    const QString homePath = QDir::cleanPath(userInfo.homePath);
+-    const QString staging = SWITCH_STAGING_DIR;
++    static const QRegularExpression forbidden(QStringLiteral("[:,=\\x00-\\x1f\\x7f]"));
++    name.remove(forbidden);
++    return name.simplified().left(128);
++}
+ 
+-    struct stat stagingInfo;
+-    if (lstat(QFile::encodeName(staging).constData(), &stagingInfo) != 0 || !S_ISDIR(stagingInfo.st_mode)
+-        || !QFile::exists(staging + QStringLiteral("/.complete"))) {
+-        return makeErrorReply(QStringLiteral("There is no complete backup to restore."));
++static bool switchRun(const QString &program, const QStringList &arguments, QString *error = nullptr)
++{
++    const QString binary = findExecutable(program);
++    if (binary.isEmpty()) {
++        if (error) {
++            *error = QStringLiteral("Could not locate ") + program;
++        }
++        return false;
+     }
+-    QFile manifestFile(staging + QStringLiteral("/manifest.json"));
+-    if (!manifestFile.open(QIODevice::ReadOnly)) {
+-        return makeErrorReply(QStringLiteral("Unable to read the backup manifest."));
++    QProcess process;
++    process.start(binary, arguments);
++    if (!process.waitForFinished(120000) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
++        if (error) {
++            *error = program + QStringLiteral(" failed: ") + QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
++        }
++        return false;
+     }
+-    const QJsonObject manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
+-    manifestFile.close();
+-    if (manifest.value(QStringLiteral("version")).toInt() != 1) {
+-        return makeErrorReply(QStringLiteral("Unknown backup manifest version."));
++    return true;
++}
++
++QString PlasmaSetupAuthHelper::createSwitchUser(const QJsonObject &data, QString *error)
++{
++    const QString base = switchUserName(data);
++    QString username;
++    for (int i = 1; i < 100 && username.isEmpty(); ++i) {
++        const QString candidate = i == 1 ? base : base + QString::number(i);
++        const QByteArray encoded = QFile::encodeName(candidate);
++        if (getpwnam(encoded.constData()) || getgrnam(encoded.constData())) {
++            continue;
++        }
++        if (PlasmaSetupValidation::Account::validateUsername(candidate) == PlasmaSetupValidation::Account::UsernameValidationResult::Valid) {
++            username = candidate;
++        }
+     }
++    if (username.isEmpty()) {
++        *error = QStringLiteral("No free user name for ") + base;
++        return {};
++    }
++    QStringList arguments = {QStringLiteral("-m"), QStringLiteral("-U")};
++    const QString fullName = switchFullName(data);
++    if (!fullName.isEmpty()) {
++        arguments << QStringLiteral("-c") << fullName;
++    }
++    arguments << username;
++    if (!switchRun(QStringLiteral("useradd"), arguments, error)) {
++        return {};
++    }
++    if (!switchRun(QStringLiteral("passwd"), {QStringLiteral("-d"), username}, error)) {
++        return {};
++    }
++    return username;
++}
+ 
+-    const QString language = switchSystemLanguage();
++void PlasmaSetupAuthHelper::moveSwitchFiles(SwitchUser &user, const QString &staging, const QString &language, bool useWallpaper, const std::function<void()> &reportMove)
++{
++    const QString &homePath = user.homePath;
++    const QString &prefix = user.prefix;
+     QProcess userDirs;
+     userDirs.start(findExecutable(QStringLiteral("runuser")),
+                    {QStringLiteral("-u"),
+-                    username,
++                    user.info.username,
+                     QStringLiteral("--"),
+                     QStringLiteral("env"),
+                     QStringLiteral("HOME=") + homePath,
+@@ -1156,41 +1252,9 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+     if (!userDirs.waitForFinished() || userDirs.exitStatus() != QProcess::NormalExit || userDirs.exitCode() != 0) {
+         qWarning() << "xdg-user-dirs-update failed:" << userDirs.readAllStandardError();
+     }
+-    const QMap<QString, QString> xdg = switchUserDirs(homePath);
+-    const QMap<QString, QString> kinds = {
+-        {QStringLiteral("desktop"), QStringLiteral("DESKTOP")},
+-        {QStringLiteral("documents"), QStringLiteral("DOCUMENTS")},
+-        {QStringLiteral("downloads"), QStringLiteral("DOWNLOAD")},
+-        {QStringLiteral("music"), QStringLiteral("MUSIC")},
+-        {QStringLiteral("pictures"), QStringLiteral("PICTURES")},
+-        {QStringLiteral("videos"), QStringLiteral("VIDEOS")},
+-    };
+-    const auto kindDir = [&](const QString &kind) -> QString {
+-        const QString dir = xdg.value(kinds.value(kind));
+-        if (!dir.isEmpty() && dir != homePath && dir.startsWith(homePath + QLatin1Char('/'))) {
+-            return dir;
+-        }
+-        static const QMap<QString, QString> fallback = {
+-            {QStringLiteral("desktop"), QStringLiteral("Desktop")},
+-            {QStringLiteral("documents"), QStringLiteral("Documents")},
+-            {QStringLiteral("downloads"), QStringLiteral("Downloads")},
+-            {QStringLiteral("music"), QStringLiteral("Music")},
+-            {QStringLiteral("pictures"), QStringLiteral("Pictures")},
+-            {QStringLiteral("videos"), QStringLiteral("Videos")},
+-        };
+-        return homePath + QLatin1Char('/') + fallback.value(kind);
+-    };
+-
+-    const QJsonArray folders = manifest.value(QStringLiteral("folders")).toArray();
+-    const int moves = int(folders.size()) + 2;
+-    int moved = 0;
+-    const auto reportMove = [&moved, moves] {
+-        HelperSupport::progressStep(QVariantMap{{QStringLiteral("step"), QStringLiteral("move")}, {QStringLiteral("percent"), ++moved * 100 / moves}});
+-    };
+-    HelperSupport::progressStep(QVariantMap{{QStringLiteral("step"), QStringLiteral("move")}, {QStringLiteral("percent"), 0}});
++    user.xdg = switchUserDirs(homePath);
+ 
+-    QMap<QString, QString> restored;
+-    for (const QJsonValue &value : folders) {
++    for (const QJsonValue &value : user.data.value(QStringLiteral("folders")).toArray()) {
+         const QJsonObject folder = value.toObject();
+         const QString kind = folder.value(QStringLiteral("kind")).toString();
+         const QString path = folder.value(QStringLiteral("path")).toString();
+@@ -1198,13 +1262,13 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+         QString key;
+         if (kind == QLatin1String("custom")) {
+             const QString name = switchFileName(folder.value(QStringLiteral("name")).toString());
+-            if (name.isEmpty() || path != QStringLiteral("home/custom/") + folder.value(QStringLiteral("name")).toString()) {
++            if (name.isEmpty() || path != prefix + QStringLiteral("home/custom/") + folder.value(QStringLiteral("name")).toString()) {
+                 continue;
+             }
+             target = homePath + QLatin1Char('/') + name;
+             key = QStringLiteral("custom/") + folder.value(QStringLiteral("name")).toString();
+-        } else if (kinds.contains(kind) && path == QStringLiteral("home/") + kind) {
+-            target = kindDir(kind);
++        } else if (switchKinds().contains(kind) && path == prefix + QStringLiteral("home/") + kind) {
++            target = switchKindDir(user, kind);
+             key = kind;
+         } else {
+             continue;
+@@ -1213,39 +1277,27 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             continue;
+         }
+         switchMergeMove(staging + QLatin1Char('/') + path, target);
+-        restored.insert(key, target);
++        user.restored.insert(key, target);
+         reportMove();
+     }
+ 
+-    QStringList browserIds;
+-    for (const QJsonValue &value : manifest.value(QStringLiteral("browsers")).toArray()) {
++    for (const QJsonValue &value : user.data.value(QStringLiteral("browsers")).toArray()) {
+         const QJsonObject browser = value.toObject();
+         const QString browserId = browser.value(QStringLiteral("flatpak")).toString();
+-        if (!switchAppId(browserId) || browserIds.contains(browserId)) {
++        if (!switchAppId(browserId) || user.browserIds.contains(browserId)) {
+             continue;
+         }
+-        browserIds << browserId;
++        user.browserIds << browserId;
+         const QString browserData = browser.value(QStringLiteral("data")).toString();
+-        if (browserData == QStringLiteral("browser/") + browserId) {
++        if (browserData == prefix + QStringLiteral("browser/") + browserId) {
+             switchMergeMove(staging + QLatin1Char('/') + browserData, homePath + QStringLiteral("/.var/app/") + browserId);
+         }
+     }
+     reportMove();
+ 
+-    bool useWallpaper = true;
+-    const QString setupSourcePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config/plasma-setuprc");
+-    if (QFile::exists(setupSourcePath)) {
+-        try {
+-            const std::unique_ptr<QTemporaryFile> setupFile = copyToTempFile(setupSourcePath);
+-            useWallpaper = KConfig(setupFile->fileName(), KConfig::SimpleConfig).group(QStringLiteral("Switch")).readEntry("Wallpaper", true);
+-        } catch (const std::runtime_error &e) {
+-            qWarning() << "Unable to read the setup choices:" << e.what();
+-        }
+-    }
+-
+-    const auto stagedFile = [&staging](const QJsonValue &value, const QString &folder) -> QString {
++    const auto stagedFile = [&staging, &prefix](const QJsonValue &value, const QString &folder) -> QString {
+         const QString path = value.toString();
+-        if (!path.startsWith(folder + QLatin1Char('/')) || path.count(QLatin1Char('/')) != 1 || !switchSafePath(path)) {
++        if (!path.startsWith(prefix + folder + QLatin1Char('/')) || path.mid(prefix.size()).count(QLatin1Char('/')) != 1 || !switchSafePath(path)) {
+             return {};
+         }
+         const QFileInfo info(staging + QLatin1Char('/') + path);
+@@ -1263,12 +1315,12 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+         }
+         return switchMove(source, destination) ? destination : QString();
+     };
+-    const QString wallpaper = useWallpaper ? keepPicture(stagedFile(manifest.value(QStringLiteral("wallpaper")), QStringLiteral("wallpaper"))) : QString();
+-    const QString lockscreen = keepPicture(stagedFile(manifest.value(QStringLiteral("lockscreen")), QStringLiteral("lockscreen")));
++    user.wallpaper = useWallpaper ? keepPicture(stagedFile(user.data.value(QStringLiteral("wallpaper")), QStringLiteral("wallpaper"))) : QString();
++    user.lockscreen = keepPicture(stagedFile(user.data.value(QStringLiteral("lockscreen")), QStringLiteral("lockscreen")));
+ 
+-    const QString sshSource = staging + QStringLiteral("/ssh");
++    const QString sshSource = staging + QLatin1Char('/') + prefix + QStringLiteral("ssh");
+     struct stat sshInfo;
+-    if (manifest.value(QStringLiteral("ssh")).toString() == QLatin1String("ssh") && lstat(QFile::encodeName(sshSource).constData(), &sshInfo) == 0
++    if (user.data.value(QStringLiteral("ssh")).toString() == prefix + QStringLiteral("ssh") && lstat(QFile::encodeName(sshSource).constData(), &sshInfo) == 0
+         && S_ISDIR(sshInfo.st_mode)) {
+         const QString sshTarget = homePath + QStringLiteral("/.ssh");
+         switchMergeMove(sshSource, sshTarget);
+@@ -1286,16 +1338,117 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+ 
+     reportMove();
+ 
+-    const QString picture = stagedFile(manifest.value(QStringLiteral("profile")).toObject().value(QStringLiteral("picture")), QStringLiteral("profile"));
++    const QString picture = stagedFile(user.data.value(QStringLiteral("profile")).toObject().value(QStringLiteral("picture")), QStringLiteral("profile"));
+     if (!picture.isEmpty()) {
+-        const QString error = setAccountIcon(username, picture);
++        const QString error = setAccountIcon(user.info.username, picture);
+         if (!error.isEmpty()) {
+             qWarning() << "Unable to set the account picture:" << error;
+         }
+     }
++}
++
++ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
++{
++    if (!args.contains(QStringLiteral("username")) || !args[QStringLiteral("username")].canConvert<QString>()) {
++        return makeErrorReply(QStringLiteral("Username argument is missing or invalid."));
++    }
++    const QString username = args[QStringLiteral("username")].toString();
++
++    UserInfo userInfo;
++    try {
++        userInfo = getUserInfo(username);
++    } catch (const std::runtime_error &e) {
++        return makeErrorReply(QStringLiteral("Failed to get user info: ") + QString::fromStdString(e.what()));
++    }
++    const QString staging = SWITCH_STAGING_DIR;
++
++    struct stat stagingInfo;
++    if (lstat(QFile::encodeName(staging).constData(), &stagingInfo) != 0 || !S_ISDIR(stagingInfo.st_mode)
++        || !QFile::exists(staging + QStringLiteral("/.complete"))) {
++        return makeErrorReply(QStringLiteral("There is no complete backup to restore."));
++    }
++    QFile manifestFile(staging + QStringLiteral("/manifest.json"));
++    if (!manifestFile.open(QIODevice::ReadOnly)) {
++        return makeErrorReply(QStringLiteral("Unable to read the backup manifest."));
++    }
++    const QJsonObject manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
++    manifestFile.close();
++    if (manifest.value(QStringLiteral("version")).toInt() != 1) {
++        return makeErrorReply(QStringLiteral("Unknown backup manifest version."));
++    }
++
++    const QString language = switchSystemLanguage();
++
++    bool useWallpaper = true;
++    const QString setupSourcePath = PLASMA_SETUP_HOMEDIR + QStringLiteral("/.config/plasma-setuprc");
++    if (QFile::exists(setupSourcePath)) {
++        try {
++            const std::unique_ptr<QTemporaryFile> setupFile = copyToTempFile(setupSourcePath);
++            useWallpaper = KConfig(setupFile->fileName(), KConfig::SimpleConfig).group(QStringLiteral("Switch")).readEntry("Wallpaper", true);
++        } catch (const std::runtime_error &e) {
++            qWarning() << "Unable to read the setup choices:" << e.what();
++        }
++    }
++
++    QList<SwitchUser> users;
++    users << SwitchUser{userInfo, QDir::cleanPath(userInfo.homePath), manifest, QString(), true, {}, {}, {}, {}, {}};
++    QStringList failedUsers;
++    static const QRegularExpression userRoot(QStringLiteral("^users/[1-9][0-9]{0,3}$"));
++    for (const QJsonValue &value : manifest.value(QStringLiteral("users")).toArray()) {
++        const QJsonObject data = value.toObject();
++        const QString root = data.value(QStringLiteral("root")).toString();
++        const bool taken = std::any_of(users.cbegin(), users.cend(), [&root](const SwitchUser &user) {
++            return user.prefix == root + QLatin1Char('/');
++        });
++        if (!userRoot.match(root).hasMatch() || taken) {
++            continue;
++        }
++        QString error;
++        const QString name = createSwitchUser(data, &error);
++        if (name.isEmpty()) {
++            qWarning() << "Unable to create an account for" << data.value(QStringLiteral("user")).toString() << ":" << error;
++            failedUsers << switchFullName(data);
++            continue;
++        }
++        UserInfo info;
++        try {
++            info = getUserInfo(name);
++        } catch (const std::runtime_error &e) {
++            qWarning() << "Unable to find the new account" << name << ":" << e.what();
++            failedUsers << switchFullName(data);
++            continue;
++        }
++        const QVariantMap themeArgs = {{QStringLiteral("username"), name}};
++        for (const ActionReply &reply : {setnewuserglobaltheme(themeArgs), setnewuserdisplayscaling(themeArgs)}) {
++            if (reply.type() != ActionReply::SuccessType) {
++                qWarning() << "Unable to set up the look for" << name << ":" << reply.errorDescription();
++            }
++        }
++        users << SwitchUser{info, QDir::cleanPath(info.homePath), data, root + QLatin1Char('/'), false, {}, {}, {}, {}, {}};
++    }
++
++    int moves = 0;
++    for (const SwitchUser &user : std::as_const(users)) {
++        moves += int(user.data.value(QStringLiteral("folders")).toArray().size()) + 2;
++    }
++    int moved = 0;
++    const auto reportMove = [&moved, moves] {
++        HelperSupport::progressStep(QVariantMap{{QStringLiteral("step"), QStringLiteral("move")}, {QStringLiteral("percent"), ++moved * 100 / moves}});
++    };
++    HelperSupport::progressStep(QVariantMap{{QStringLiteral("step"), QStringLiteral("move")}, {QStringLiteral("percent"), 0}});
++
++    for (SwitchUser &user : users) {
++        moveSwitchFiles(user, staging, language, !user.primary || useWallpaper, reportMove);
++    }
+ 
+     QStringList apps;
+-    apps << browserIds;
++    for (const SwitchUser &user : std::as_const(users)) {
++        for (const QString &id : user.browserIds) {
++            if (!apps.contains(id)) {
++                apps << id;
++            }
++        }
++    }
+     for (const QJsonValue &value : manifest.value(QStringLiteral("apps")).toArray()) {
+         const QString id = value.toObject().value(QStringLiteral("flatpak")).toString();
+         if (switchAppId(id) && !apps.contains(id)) {
+@@ -1322,6 +1475,37 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+     }
+     HelperSupport::progressStep(QVariantMap{{QStringLiteral("step"), QStringLiteral("settings")}});
+ 
++    ::rmdir(QFile::encodeName(SWITCH_LOCAL_DIR).constData());
++
++    QStringList createdUsers;
++    for (const SwitchUser &user : std::as_const(users)) {
++        const ActionReply reply = finishSwitchUser(user);
++        if (reply.type() != ActionReply::SuccessType) {
++            if (user.primary) {
++                return reply;
++            }
++            qWarning() << "Unable to finish the account" << user.info.username << ":" << reply.errorDescription();
++        }
++        if (!user.primary) {
++            createdUsers << user.info.username;
++        }
++    }
++
++    QDir(staging).removeRecursively();
++    switchfirewall({{QStringLiteral("open"), false}});
++    ActionReply reply = ActionReply::SuccessReply();
++    reply.setData({{QStringLiteral("failedApps"), failedApps}, {QStringLiteral("createdUsers"), createdUsers}, {QStringLiteral("failedUsers"), failedUsers}});
++    return reply;
++}
++
++ActionReply PlasmaSetupAuthHelper::finishSwitchUser(const SwitchUser &user)
++{
++    const QString &homePath = user.homePath;
++    const QJsonObject &manifest = user.data;
++    const QString &wallpaper = user.wallpaper;
++    const QString &lockscreen = user.lockscreen;
++    const QMap<QString, QString> &restored = user.restored;
++
+     QStringList pwas;
+     static const QRegularExpression pwaId(QStringLiteral("^[A-Za-z0-9_][A-Za-z0-9_.-]*$"));
+     for (const QJsonValue &value : manifest.value(QStringLiteral("pwas")).toArray()) {
+@@ -1334,10 +1518,9 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+         return id.startsWith(QLatin1String("arc-pwa-")) && pwas.contains(id.mid(8));
+     };
+ 
+-    switchOwnerUid = userInfo.uid;
+-    switchOwnerGid = userInfo.gid;
++    switchOwnerUid = user.info.uid;
++    switchOwnerGid = user.info.gid;
+     nftw(QFile::encodeName(homePath).constData(), switchChownEntry, 64, FTW_PHYS);
+-    ::rmdir(QFile::encodeName(SWITCH_LOCAL_DIR).constData());
+ 
+     const auto launchers = [&homePath, &knownPwa](const QJsonArray &ids) {
+         QStringList result;
+@@ -1355,10 +1538,18 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+     QMap<QString, QString> desktopNames;
+     QJsonObject desktopLayout = manifest.value(QStringLiteral("desktopLayout")).toObject();
+ 
++    const QJsonObject profile = manifest.value(QStringLiteral("profile")).toObject();
++    static const QRegularExpression accentPattern(QStringLiteral("^#[0-9A-Fa-f]{6}$"));
++    const QString accent = !user.primary && accentPattern.match(profile.value(QStringLiteral("accent")).toString()).hasMatch()
++        ? profile.value(QStringLiteral("accent")).toString()
++        : QString();
++    const QJsonValue darkValue = profile.value(QStringLiteral("dark"));
++    const bool themed = !user.primary && (darkValue.isBool() || !accent.isEmpty());
++
+     try {
+-        PrivilegeGuard guard(userInfo);
++        PrivilegeGuard guard(user.info);
+ 
+-        const QString desktop = kindDir(QStringLiteral("desktop"));
++        const QString desktop = switchKindDir(user, QStringLiteral("desktop"));
+         QDir().mkpath(desktop);
+         for (const QJsonValue &value : manifest.value(QStringLiteral("desktop")).toArray()) {
+             const QJsonObject item = value.toObject();
+@@ -1444,6 +1635,45 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             desktopLayout.insert(QStringLiteral("items"), positions);
+         }
+ 
++        if (!user.primary) {
++            QString defaultBrowser;
++            for (const QJsonValue &value : manifest.value(QStringLiteral("browsers")).toArray()) {
++                const QString id = value.toObject().value(QStringLiteral("flatpak")).toString();
++                if (value.toObject().value(QStringLiteral("default")).toBool() && switchAppId(id)
++                    && QFile::exists(QStringLiteral("/var/lib/flatpak/exports/share/applications/") + id + QStringLiteral(".desktop"))) {
++                    defaultBrowser = id + QStringLiteral(".desktop");
++                }
++            }
++            if (!defaultBrowser.isEmpty()) {
++                const QString configDir = homePath + QStringLiteral("/.config");
++                QDir().mkpath(configDir);
++                KConfig mimeApps(configDir + QStringLiteral("/mimeapps.list"), KConfig::SimpleConfig);
++                KConfigGroup defaults = mimeApps.group(QStringLiteral("Default Applications"));
++                for (const char *mimeType : {"x-scheme-handler/http", "x-scheme-handler/https", "text/html", "application/xhtml+xml"}) {
++                    defaults.writeEntry(mimeType, defaultBrowser);
++                }
++                KConfig globals(configDir + QStringLiteral("/kdeglobals"), KConfig::SimpleConfig);
++                globals.group(QStringLiteral("General")).writeEntry("BrowserApplication", defaultBrowser);
++                if (!mimeApps.sync() || !globals.sync()) {
++                    qWarning() << "Unable to write the default browser for" << user.info.username;
++                }
++            }
++
++            const QString autostartDir = homePath + QStringLiteral("/.config/autostart");
++            QDir().mkpath(autostartDir);
++            KConfig entry(autostartDir + QStringLiteral("/blossomos-switch-password.desktop"), KConfig::SimpleConfig);
++            KConfigGroup group = entry.group(QStringLiteral("Desktop Entry"));
++            group.writeEntry("Type", QStringLiteral("Application"));
++            group.writeEntry("Name", QStringLiteral("BlossomOS Switch Password"));
++            group.writeEntry("Exec", QStringLiteral("python3 /usr/share/plasma-setup/switchpassword.py"));
++            group.writeEntry("OnlyShowIn", QStringLiteral("KDE;"));
++            group.writeEntry("NoDisplay", true);
++            group.writeEntry("X-KDE-StartupNotify", false);
++            if (!entry.sync()) {
++                return makeErrorReply(QStringLiteral("Unable to write the password reminder for ") + user.info.username);
++            }
++        }
++
+         const QJsonObject preferences = manifest.value(QStringLiteral("preferences")).toObject();
+         if (!preferences.isEmpty()) {
+             const QString configDir = homePath + QStringLiteral("/.config");
+@@ -1465,7 +1695,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             entry.sync();
+         }
+ 
+-        if (!wallpaper.isEmpty() || !lockscreen.isEmpty() || !taskbar.isEmpty() || !start.isEmpty() || !pwas.isEmpty() || !desktopLayout.isEmpty()) {
++        if (themed || !wallpaper.isEmpty() || !lockscreen.isEmpty() || !taskbar.isEmpty() || !start.isEmpty() || !pwas.isEmpty() || !desktopLayout.isEmpty()) {
+             const QString scriptDir = homePath + QStringLiteral("/.local/share/blossomos-switch");
+             const QString autostartDir = homePath + QStringLiteral("/.config/autostart");
+             if (!QDir().mkpath(scriptDir) || !QDir().mkpath(autostartDir)) {
+@@ -1543,6 +1773,12 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+             stream << "wait_for org.kde.plasmashell || exit 0\n";
+             stream << "sleep 3\n";
+             stream << "if [ ! -e \"$dir/visuals\" ]; then\n";
++            if (darkValue.isBool()) {
++                stream << "    plasma-apply-lookandfeel --apply " << (darkValue.toBool() ? "org.blossomos.ui.dark.desktop" : "org.blossomos.ui.light.desktop") << " >/dev/null 2>&1\n";
++            }
++            if (!accent.isEmpty()) {
++                stream << "    plasma-apply-colorscheme --accent-color " << switchShellQuote(accent) << " >/dev/null 2>&1\n";
++            }
+             if (!wallpaper.isEmpty()) {
+                 stream << "    plasma-apply-wallpaperimage " << switchShellQuote(wallpaper) << "\n";
+             }
+@@ -1570,7 +1806,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+                 stream << "done\n";
+             }
+             if (!laterLinks.isEmpty()) {
+-                stream << "desktop=" << switchShellQuote(kindDir(QStringLiteral("desktop"))) << "\n";
++                stream << "desktop=" << switchShellQuote(switchKindDir(user, QStringLiteral("desktop"))) << "\n";
+                 stream << "link() {\n";
+                 stream << "    [ -f \"$apps/$1.desktop\" ] || return 0\n";
+                 stream << "    target=\"$desktop/$2.desktop\"\n";
+@@ -1623,11 +1859,7 @@ ActionReply PlasmaSetupAuthHelper::restorebackup(const QVariantMap &args)
+         return makeErrorReply(QStringLiteral("Failed to drop privileges: ") + QString::fromStdString(e.what()));
+     }
+ 
+-    QDir(staging).removeRecursively();
+-    switchfirewall({{QStringLiteral("open"), false}});
+-    ActionReply reply = ActionReply::SuccessReply();
+-    reply.setData({{QStringLiteral("failedApps"), failedApps}});
+-    return reply;
++    return ActionReply::SuccessReply();
+ }
+ 
+ ActionReply PlasmaSetupAuthHelper::setnewuseravatar(const QVariantMap &args)
+diff --git a/src/auth/authhelper.h b/src/auth/authhelper.h
+index b0457ff..3c22fa7 100644
+--- a/src/auth/authhelper.h
++++ b/src/auth/authhelper.h
+@@ -6,11 +6,16 @@
+ 
+ #include <KAuth/ActionReply>
+ 
++#include <QJsonObject>
+ #include <QTemporaryFile>
+ #include <QVariant>
+ 
++#include <functional>
++
+ using namespace KAuth;
+ 
++struct SwitchUser;
++
+ /**
+  * Struct to hold user information.
+  */
+@@ -140,6 +145,10 @@ public Q_SLOTS:
+     ActionReply setnewuseravatar(const QVariantMap &args);
+ 
+ private:
++    QString createSwitchUser(const QJsonObject &data, QString *error);
++    void moveSwitchFiles(SwitchUser &user, const QString &staging, const QString &language, bool useWallpaper, const std::function<void()> &reportMove);
++    ActionReply finishSwitchUser(const SwitchUser &user);
++
+     /**
+      * Adds a user to the provided supplementary groups using usermod.
+      */
+diff --git a/src/auth/switchpassword.py b/src/auth/switchpassword.py
+new file mode 100644
+index 0000000..49fdd38
+--- /dev/null
++++ b/src/auth/switchpassword.py
+@@ -0,0 +1,94 @@
++import os
++import pty
++import subprocess
++import sys
++
++AUTOSTART = os.path.expanduser("~/.config/autostart/blossomos-switch-password.desktop")
++
++GERMAN = os.environ.get("LANG", "").startswith("de")
++TEXT = {
++    "title": "Passwort wählen" if GERMAN else "Choose a password",
++    "ask": (
++        "Willkommen bei BlossomOS. Dein Konto wurde von Windows übernommen und hat noch kein Passwort. Wähle jetzt eins."
++        if GERMAN
++        else "Welcome to BlossomOS. Your account was moved over from Windows and has no password yet. Choose one now."
++    ),
++    "failed": "Das Passwort wurde nicht übernommen." if GERMAN else "The password was not accepted.",
++    "later": (
++        "Du wirst bei der nächsten Anmeldung wieder gefragt. Bis dahin hat dein Konto kein Passwort."
++        if GERMAN
++        else "You will be asked again the next time you sign in. Until then your account has no password."
++    ),
++}
++
++
++def finish():
++    try:
++        os.remove(AUTOSTART)
++    except FileNotFoundError:
++        pass
++
++
++def ask():
++    result = subprocess.run(
++        ["kdialog", "--title", TEXT["title"], "--newpassword", TEXT["ask"]],
++        capture_output=True,
++        text=True,
++    )
++    if result.returncode != 0:
++        return None
++    password = result.stdout.rstrip("\n")
++    return password or None
++
++
++def change(password):
++    pid, fd = pty.fork()
++    if pid == 0:
++        os.environ["LC_ALL"] = "C"
++        os.execvp("passwd", ["passwd"])
++    output = b""
++    answered = 0
++    has_password = False
++    while True:
++        try:
++            chunk = os.read(fd, 1024)
++        except OSError:
++            break
++        if not chunk:
++            break
++        output += chunk
++        prompt = output.rsplit(b"\n", 1)[-1].lower()
++        if prompt.rstrip().endswith(b"password:"):
++            if b"current" in prompt:
++                has_password = True
++                os.kill(pid, 15)
++                break
++            if answered >= 6:
++                os.kill(pid, 15)
++                break
++            os.write(fd, password.encode() + b"\n")
++            answered += 1
++            output += b"\n"
++    _, status = os.waitpid(pid, 0)
++    os.close(fd)
++    if has_password:
++        return True, ""
++    message = [line.strip() for line in output.decode(errors="replace").splitlines() if line.strip().upper().startswith(("BAD PASSWORD", "PASSWD:"))]
++    return os.waitstatus_to_exitcode(status) == 0, "\n".join(message)
++
++
++def main():
++    while True:
++        password = ask()
++        if password is None:
++            subprocess.run(["kdialog", "--title", TEXT["title"], "--sorry", TEXT["later"]])
++            return 0
++        ok, message = change(password)
++        if ok:
++            finish()
++            return 0
++        subprocess.run(["kdialog", "--title", TEXT["title"], "--sorry", f"{TEXT['failed']}\n\n{message}".strip()])
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/src/initialstartutil.cpp b/src/initialstartutil.cpp
+index 51e66f9..6ccd8df 100644
+--- a/src/initialstartutil.cpp
++++ b/src/initialstartutil.cpp
+@@ -190,6 +190,10 @@ void InitialStartUtil::startRestore()
+         if (!failedApps.isEmpty()) {
+             setStep(QStringLiteral("apps"), QStringLiteral("failed"), -1, i18n("Not installed: %1", failedApps.join(QStringLiteral(", "))));
+         }
++        const QStringList failedUsers = job->data().value(QStringLiteral("failedUsers")).toStringList();
++        if (!failedUsers.isEmpty()) {
++            setStep(QStringLiteral("settings"), QStringLiteral("failed"), -1, i18n("No account was created for: %1", failedUsers.join(QStringLiteral(", "))));
++        }
+         finishUserSteps();
+     });
+     job->start();
