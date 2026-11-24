@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Wed, 21 Oct 2026 05:10:33 +0200
-Subject: [PATCH 09/22] Add an updates page
+Subject: [PATCH 09/23] Add an updates page
 
 After the network page, downloads and stages the latest system image
 through rpm-ostree, with the download progress estimated like in
@@ -34,8 +34,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  src/initialstartutil.h                |   6 +
  src/pagesmodel.cpp                    |   5 +
  src/pagesmodel.h                      |   5 +
- src/qml/Wizard.qml                    |  10 +
- 17 files changed, 896 insertions(+)
+ src/qml/Wizard.qml                    |  17 +
+ 17 files changed, 903 insertions(+)
  create mode 100644 modules/updates/CMakeLists.txt
  create mode 100644 modules/updates/contents/ui/main.qml
  create mode 100644 modules/updates/metadata.json
@@ -1104,25 +1104,40 @@ index fcda49b..e024298 100644
      void loaded();
  
 diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
-index e0828ef..0dcf69c 100644
+index e0828ef..0288684 100644
 --- a/src/qml/Wizard.qml
 +++ b/src/qml/Wizard.qml
-@@ -93,6 +93,14 @@ Kirigami.Page {
+@@ -68,7 +68,12 @@ Kirigami.Page {
+         }
+     }
+ 
++    property bool removingSkippedPages: false
++
+     onStepCountChanged: {
++        if (removingSkippedPages) {
++            return;
++        }
+         // reset position
+         requestPreviousPage();
+     }
+@@ -93,6 +98,16 @@ Kirigami.Page {
              return;
          }
  
 +        // A page can drop out right before its turn by implementing
 +        // `skipPage()`, like the browser page when there is no internet
 +        let upcomingItem = stepsRepeater.itemAt(currentIndex + 1);
++        removingSkippedPages = true;
 +        while (upcomingItem && upcomingItem.module && typeof upcomingItem.module.skipPage === "function" && upcomingItem.module.skipPage()) {
 +            pagesModel.removePage(currentIndex + 1);
 +            upcomingItem = stepsRepeater.itemAt(currentIndex + 1);
 +        }
++        removingSkippedPages = false;
 +
          previousStepItemX = 0;
  
          // Notify the next page/module it is being activated.
-@@ -328,6 +336,8 @@ Kirigami.Page {
+@@ -328,6 +343,8 @@ Kirigami.Page {
                          text: i18nc("@action:button", "Back")
                          icon.name: "go-previous-symbolic"
  

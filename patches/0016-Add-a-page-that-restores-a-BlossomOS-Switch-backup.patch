@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Tue, 27 Oct 2026 02:55:53 +0100
-Subject: [PATCH 16/22] Add a page that restores a BlossomOS Switch backup
+Subject: [PATCH 16/23] Add a page that restores a BlossomOS Switch backup
 
 ---
  docs/CUSTOM_MODULES.md                  |   5 +-
@@ -13075,10 +13075,10 @@ index 4070f2c..5c541bb 100644
      /**
       * Logs out of the plasma-setup user.
 diff --git a/src/qml/Wizard.qml b/src/qml/Wizard.qml
-index 0dcf69c..8bdd315 100644
+index 0288684..6ae391c 100644
 --- a/src/qml/Wizard.qml
 +++ b/src/qml/Wizard.qml
-@@ -320,6 +320,48 @@ Kirigami.Page {
+@@ -327,6 +327,48 @@ Kirigami.Page {
                          delegate: PageDelegate {}
                          Layout.alignment: Qt.AlignHCenter
                      }
@@ -13127,7 +13127,7 @@ index 0dcf69c..8bdd315 100644
                  }
  
                  // bottom footer
-@@ -336,7 +378,7 @@ Kirigami.Page {
+@@ -343,7 +385,7 @@ Kirigami.Page {
                          text: i18nc("@action:button", "Back")
                          icon.name: "go-previous-symbolic"
  
@@ -13136,7 +13136,7 @@ index 0dcf69c..8bdd315 100644
  
                          onClicked: root.requestPreviousPage()
  
-@@ -374,7 +416,7 @@ Kirigami.Page {
+@@ -381,7 +423,7 @@ Kirigami.Page {
                          text: i18nc("@action:button", "Finish")
                          icon.name: "dialog-ok-symbolic"
  

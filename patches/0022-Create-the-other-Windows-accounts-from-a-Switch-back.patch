@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Fri, 13 Nov 2026 16:44:37 +0100
-Subject: [PATCH 22/22] Create the other Windows accounts from a Switch backup
+Subject: [PATCH 22/23] Create the other Windows accounts from a Switch backup
 
 ---
  modules/switch/contents/ui/main.qml    |  12 +
