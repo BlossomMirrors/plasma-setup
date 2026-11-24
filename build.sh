@@ -14,7 +14,7 @@ FEDORA_VERSION="${1:-45}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 CACHE_DIR="${SCRIPT_DIR}/cache"
-RELEASE_SUFFIX="blossomos4"
+RELEASE_SUFFIX="blossomos5"
 
 if [[ ! -e /run/.containerenv && ! -e /.dockerenv && -z "${CI:-}" ]]; then
     TOOLBOX_NAME="plasma-setup-rpm-f${FEDORA_VERSION}"

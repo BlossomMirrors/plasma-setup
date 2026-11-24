@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: koyu <me@koyu.space>
 Date: Tue, 24 Nov 2026 05:03:03 +0100
-Subject: [PATCH 23/23] Skip the pages a Switch backup answers and restore its
+Subject: [PATCH 23/24] Skip the pages a Switch backup answers and restore its
  hostname, desktop icon size and trash
 
 ---

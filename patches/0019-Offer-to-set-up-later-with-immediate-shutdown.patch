@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Codex <codex@localhost>
 Date: Fri, 30 Oct 2026 14:41:57 +0100
-Subject: [PATCH 19/23] Offer to set up later with immediate shutdown
+Subject: [PATCH 19/24] Offer to set up later with immediate shutdown
 
 ---
  po/de/org.kde.plasmasetup.po |  3 ++
