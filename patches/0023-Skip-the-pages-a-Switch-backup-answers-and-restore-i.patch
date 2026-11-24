@@ -1,0 +1,260 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koyu <me@koyu.space>
+Date: Tue, 24 Nov 2026 05:03:03 +0100
+Subject: [PATCH 23/23] Skip the pages a Switch backup answers and restore its
+ hostname, desktop icon size and trash
+
+---
+ modules/appearance/contents/ui/main.qml |  8 ++++++++
+ modules/hostname/contents/ui/main.qml   | 12 ++++++++++++
+ modules/keyboard/contents/ui/main.qml   |  5 +++++
+ modules/language/contents/ui/main.qml   |  5 +++++
+ modules/switchutil/switchutil.cpp       | 10 ++++++++++
+ modules/switchutil/switchutil.h         |  4 ++++
+ modules/time/contents/ui/main.qml       |  5 +++++
+ modules/updates/contents/ui/main.qml    |  3 ++-
+ modules/wifi/contents/ui/main.qml       |  5 +++++
+ src/auth/authhelper.cpp                 | 21 +++++++++++++++++++++
+ src/auth/switchdesktop.js               |  8 ++++++++
+ 11 files changed, 85 insertions(+), 1 deletion(-)
+
+diff --git a/modules/appearance/contents/ui/main.qml b/modules/appearance/contents/ui/main.qml
+index 6389f99..5efae23 100644
+--- a/modules/appearance/contents/ui/main.qml
++++ b/modules/appearance/contents/ui/main.qml
+@@ -41,6 +41,14 @@ PlasmaSetupComponents.SetupModule {
+     readonly property bool hasWallpapers: wallpaperModel.length > 1
+     property bool prefilled: false
+ 
++    function skipPage(): bool {
++        if (!Switch.SwitchUtil.providesLook) {
++            return false;
++        }
++        onPageActivated();
++        return true;
++    }
++
+     function onPageActivated(): void {
+         if (prefilled || Switch.SwitchUtil.state !== Switch.SwitchUtil.Done) {
+             return;
+diff --git a/modules/hostname/contents/ui/main.qml b/modules/hostname/contents/ui/main.qml
+index 075c6ab..35f24c0 100644
+--- a/modules/hostname/contents/ui/main.qml
++++ b/modules/hostname/contents/ui/main.qml
+@@ -48,6 +48,18 @@ PlasmaSetupComponents.SetupModule {
+ 
+     property bool prefilled: false
+ 
++    function skipPage(): bool {
++        if (Switch.SwitchUtil.state !== Switch.SwitchUtil.Done || Switch.SwitchUtil.profileHostname === "") {
++            return false;
++        }
++        if (!prefilled) {
++            prefilled = true;
++            hostnameField.text = Switch.SwitchUtil.profileHostname;
++            HostnameUtil.hostname = Switch.SwitchUtil.profileHostname;
++        }
++        return true;
++    }
++
+     function onPageActivated() {
+         if (!prefilled && !hasEdited && Switch.SwitchUtil.profileHostname !== "") {
+             prefilled = true;
+diff --git a/modules/keyboard/contents/ui/main.qml b/modules/keyboard/contents/ui/main.qml
+index 219d5d3..4dea8fb 100644
+--- a/modules/keyboard/contents/ui/main.qml
++++ b/modules/keyboard/contents/ui/main.qml
+@@ -18,10 +18,15 @@ import org.kde.plasmasetup
+ import org.kde.plasmasetup.components as PlasmaSetupComponents
+ 
+ import org.kde.plasma.private.kcm_keyboard as KCMKeyboard
++import org.kde.plasmasetup.switchutil as Switch
+ 
+ PlasmaSetupComponents.SetupModule {
+     id: root
+ 
++    function skipPage(): bool {
++        return Switch.SwitchUtil.installedBySwitch;
++    }
++
+     available: !Kirigami.Settings.isMobile
+ 
+     function onPageActivated(): void {
+diff --git a/modules/language/contents/ui/main.qml b/modules/language/contents/ui/main.qml
+index a031fac..a4422b1 100644
+--- a/modules/language/contents/ui/main.qml
++++ b/modules/language/contents/ui/main.qml
+@@ -12,6 +12,7 @@ import org.kde.kirigami as Kirigami
+ import org.kde.plasmasetup.languageutil as Language
+ 
+ import org.kde.plasmasetup.components as PlasmaSetupComponents
++import org.kde.plasmasetup.switchutil as Switch
+ 
+ /**
+ * @brief Module for selecting system language
+@@ -23,6 +24,10 @@ import org.kde.plasmasetup.components as PlasmaSetupComponents
+ PlasmaSetupComponents.SetupModule {
+     id: root
+ 
++    function skipPage(): bool {
++        return Switch.SwitchUtil.installedBySwitch;
++    }
++
+     function onPageActivated(): void {
+         searchField.forceActiveFocus();
+     }
+diff --git a/modules/switchutil/switchutil.cpp b/modules/switchutil/switchutil.cpp
+index bfa43c5..a6a8d14 100644
+--- a/modules/switchutil/switchutil.cpp
++++ b/modules/switchutil/switchutil.cpp
+@@ -290,6 +290,16 @@ bool SwitchUtil::providesBrowser() const
+     return m_state == Done && !defaultBrowser().isEmpty();
+ }
+ 
++bool SwitchUtil::installedBySwitch() const
++{
++    return QFile::exists(u"/var/lib/blossomos-switch/installed"_s);
++}
++
++bool SwitchUtil::providesLook() const
++{
++    return m_state == Done && (profileDark() != -1 || !profileAccent().isEmpty() || !wallpaper().isEmpty());
++}
++
+ QVariantList SwitchUtil::steps() const
+ {
+     QString copyState = u"waiting"_s;
+diff --git a/modules/switchutil/switchutil.h b/modules/switchutil/switchutil.h
+index 700099b..904d4ab 100644
+--- a/modules/switchutil/switchutil.h
++++ b/modules/switchutil/switchutil.h
+@@ -43,6 +43,8 @@ class SwitchUtil : public QObject
+     Q_PROPERTY(int appsDone READ appsDone NOTIFY appsChanged)
+     Q_PROPERTY(int appsFailed READ appsFailed NOTIFY appsChanged)
+     Q_PROPERTY(bool providesBrowser READ providesBrowser NOTIFY stateChanged)
++    Q_PROPERTY(bool installedBySwitch READ installedBySwitch CONSTANT)
++    Q_PROPERTY(bool providesLook READ providesLook NOTIFY stateChanged)
+     Q_PROPERTY(QString profileName READ profileName NOTIFY stateChanged)
+     Q_PROPERTY(QString profileHostname READ profileHostname NOTIFY stateChanged)
+     Q_PROPERTY(QUrl profilePicture READ profilePicture NOTIFY stateChanged)
+@@ -96,6 +98,8 @@ public:
+     bool providesBrowser() const;
+     QString profileName() const;
+     QString profileHostname() const;
++    bool installedBySwitch() const;
++    bool providesLook() const;
+     QUrl profilePicture() const;
+     QString profileAccent() const;
+     int profileDark() const;
+diff --git a/modules/time/contents/ui/main.qml b/modules/time/contents/ui/main.qml
+index c259c36..46c302d 100644
+--- a/modules/time/contents/ui/main.qml
++++ b/modules/time/contents/ui/main.qml
+@@ -12,10 +12,15 @@ import org.kde.plasmasetup.timeutil as Time
+ import org.kde.plasma.workspace.timezoneselector as TimeZone
+ 
+ import org.kde.plasmasetup.components as PlasmaSetupComponents
++import org.kde.plasmasetup.switchutil as Switch
+ 
+ PlasmaSetupComponents.SetupModule {
+     id: root
+ 
++    function skipPage(): bool {
++        return Switch.SwitchUtil.installedBySwitch;
++    }
++
+     contentItem: ColumnLayout {
+         id: mainColumn
+         spacing: Kirigami.Units.gridUnit
+diff --git a/modules/updates/contents/ui/main.qml b/modules/updates/contents/ui/main.qml
+index f427921..1f39f4c 100644
+--- a/modules/updates/contents/ui/main.qml
++++ b/modules/updates/contents/ui/main.qml
+@@ -12,6 +12,7 @@ import org.kde.plasmasetup
+ import org.kde.plasmasetup.updatesutil as Updates
+ 
+ import org.kde.plasmasetup.components as PlasmaSetupComponents
++import org.kde.plasmasetup.switchutil as Switch
+ 
+ /**
+ * @brief Module that installs system updates
+@@ -31,7 +32,7 @@ PlasmaSetupComponents.SetupModule {
+     backEnabled: nextEnabled
+ 
+     function skipPage(): bool {
+-        return !InitialStartUtil.online();
++        return !InitialStartUtil.online() || Switch.SwitchUtil.installedBySwitch;
+     }
+ 
+     function onPageActivated(): void {
+diff --git a/modules/wifi/contents/ui/main.qml b/modules/wifi/contents/ui/main.qml
+index 1dfb105..3d5c52d 100644
+--- a/modules/wifi/contents/ui/main.qml
++++ b/modules/wifi/contents/ui/main.qml
+@@ -13,10 +13,15 @@ import org.kde.plasma.networkmanagement as PlasmaNM
+ 
+ import org.kde.plasmasetup.components as PlasmaSetupComponents
+ import org.kde.plasmasetup
++import org.kde.plasmasetup.switchutil as Switch
+ 
+ PlasmaSetupComponents.SetupModule {
+     id: root
+ 
++    function skipPage(): bool {
++        return Switch.SwitchUtil.installedBySwitch && InitialStartUtil.online();
++    }
++
+     available: availableDevices.wirelessDeviceAvailable
+ 
+     contentItem: ColumnLayout {
+diff --git a/src/auth/authhelper.cpp b/src/auth/authhelper.cpp
+index 6867415..bda5383 100644
+--- a/src/auth/authhelper.cpp
++++ b/src/auth/authhelper.cpp
+@@ -1614,6 +1614,27 @@ ActionReply PlasmaSetupAuthHelper::finishSwitchUser(const SwitchUser &user)
+             }
+         }
+ 
++        if (desktopLayout.contains(QStringLiteral("trash"))) {
++            QDir().mkpath(desktop);
++            KConfig trashEntry(desktop + QStringLiteral("/trash.desktop"), KConfig::SimpleConfig);
++            KConfigGroup trashGroup = trashEntry.group(QStringLiteral("Desktop Entry"));
++            trashGroup.writeEntry("Type", QStringLiteral("Link"));
++            trashGroup.writeEntry("Name", QStringLiteral("Trash"));
++            trashGroup.writeEntry("Name[de]", QStringLiteral("Papierkorb"));
++            trashGroup.writeEntry("Icon", QStringLiteral("user-trash-full"));
++            trashGroup.writeEntry("EmptyIcon", QStringLiteral("user-trash"));
++            trashGroup.writeEntry("URL", QStringLiteral("trash:/"));
++            trashEntry.sync();
++            const QJsonObject trash = desktopLayout.value(QStringLiteral("trash")).toObject();
++            if (trash.contains(QStringLiteral("x")) && trash.contains(QStringLiteral("y"))) {
++                QJsonArray items = desktopLayout.value(QStringLiteral("items")).toArray();
++                items.append(QJsonObject{{QStringLiteral("path"), QStringLiteral("trash.desktop")},
++                                         {QStringLiteral("x"), trash.value(QStringLiteral("x"))},
++                                         {QStringLiteral("y"), trash.value(QStringLiteral("y"))}});
++                desktopLayout.insert(QStringLiteral("items"), items);
++            }
++        }
++
+         // Match positions to the actual names chosen above, including directory links
+         // and collision suffixes. Never let a manifest path escape the desktop.
+         if (!desktopLayout.isEmpty()) {
+diff --git a/src/auth/switchdesktop.js b/src/auth/switchdesktop.js
+index 57b96b4..e339218 100644
+--- a/src/auth/switchdesktop.js
++++ b/src/auth/switchdesktop.js
+@@ -45,6 +45,14 @@ function switchApplyDesktopLayout(layout) {
+         desktop.writeConfig("arrangement", 1); // top to bottom, then the next column
+         desktop.writeConfig("alignment", 0);
+         desktop.writeConfig("locked", false); // auto-arrange does not mean immovable icons
++        if (typeof layout.iconSize === "number" && isFinite(layout.iconSize) && layout.iconSize > 0) {
++            var sizes = [16, 22, 32, 48, 64, 128];
++            var nearest = 0;
++            sizes.forEach(function (size, index) {
++                if (Math.abs(size - layout.iconSize) < Math.abs(sizes[nearest] - layout.iconSize)) nearest = index;
++            });
++            desktop.writeConfig("iconSize", nearest);
++        }
+         if (layout.autoArrange) {
+             desktop.writeConfig("sortMode", 0); // FolderModel: name = 0, manual = -1
+             return;
